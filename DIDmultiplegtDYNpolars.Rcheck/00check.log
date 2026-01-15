@@ -1,0 +1,120 @@
+* using log directory ‘/Users/anzony.quisperojas/Documents/GitHub/R_didgt_polars/DIDmultiplegtDYNpolars.Rcheck’
+* using R version 4.5.2 (2025-10-31)
+* using platform: aarch64-apple-darwin20
+* R was compiled by
+    Apple clang version 16.0.0 (clang-1600.0.26.6)
+    GNU Fortran (GCC) 14.2.0
+* running under: macOS Sequoia 15.7.1
+* using session charset: UTF-8
+* using options ‘--no-tests --no-manual --no-vignettes’
+* checking for file ‘DIDmultiplegtDYNpolars/DESCRIPTION’ ... OK
+* this is package ‘DIDmultiplegtDYNpolars’ version ‘2.2.0’
+* package encoding: UTF-8
+* checking package namespace information ... OK
+* checking package dependencies ... OK
+* checking if this is a source package ... OK
+* checking if there is a namespace ... OK
+* checking for executable files ... OK
+* checking for hidden files and directories ... NOTE
+Found the following hidden files and directories:
+  R/.claude
+These were most likely included in error. See section ‘Package
+structure’ in the ‘Writing R Extensions’ manual.
+* checking for portable file names ... WARNING
+Found the following file with a non-portable file name:
+  tests/~$comparison_results.xlsx
+These are not fully portable file names.
+See section ‘Package structure’ in the ‘Writing R Extensions’ manual.
+* checking for sufficient/correct file permissions ... OK
+* checking whether package ‘DIDmultiplegtDYNpolars’ can be installed ... OK
+* used C++ compiler: ‘Apple clang version 17.0.0 (clang-1700.4.4.1)’
+* used SDK: ‘MacOSX26.1.sdk’
+* checking installed package size ... INFO
+  installed size is 164.5Mb
+  sub-directories of 1Mb or more:
+    data  163.8Mb
+* checking package directory ... OK
+* checking DESCRIPTION meta-information ... OK
+* checking top-level files ... OK
+* checking for left-over files ... OK
+* checking index information ... OK
+* checking package subdirectories ... OK
+* checking code files for non-ASCII characters ... OK
+* checking R files for syntax errors ... OK
+* checking whether the package can be loaded ... OK
+* checking whether the package can be loaded with stated dependencies ... OK
+* checking whether the package can be unloaded cleanly ... OK
+* checking whether the namespace can be loaded with stated dependencies ... OK
+* checking whether the namespace can be unloaded cleanly ... OK
+* checking loading without being on the library search path ... OK
+* checking dependencies in R code ... OK
+* checking S3 generic/method consistency ... OK
+* checking replacement functions ... OK
+* checking foreign function calls ... OK
+* checking R code for possible problems ... NOTE
+did_multiplegt_by_path: no visible global function definition for
+  ‘aggregate’
+did_multiplegt_dyn_by_check: no visible global function definition for
+  ‘aggregate’
+did_multiplegt_dyn_design: no visible global function definition for
+  ‘ave’
+did_multiplegt_dyn_design: no visible global function definition for
+  ‘aggregate’
+did_multiplegt_dyn_dfs: no visible global function definition for
+  ‘aggregate’
+did_multiplegt_dyn_normweights: no visible global function definition
+  for ‘aggregate’
+did_multiplegt_main: no visible binding for global variable ‘M_g_XX’
+did_multiplegt_main: no visible binding for global variable
+  ‘delta_D_g_XX’
+did_multiplegt_main: no visible binding for global variable
+  ‘delta_D_g_XX_temp’
+did_multiplegt_main: no visible binding for global variable
+  ‘switchers_tag_XX’
+did_multiplegt_main: no visible binding for global variable
+  ‘outcome_non_diff_XX’
+did_multiplegt_main: no visible binding for global variable
+  ‘feasible_het_XX’
+Undefined global functions or variables:
+  M_g_XX aggregate ave delta_D_g_XX delta_D_g_XX_temp feasible_het_XX
+  outcome_non_diff_XX switchers_tag_XX
+Consider adding
+  importFrom("stats", "aggregate", "ave")
+to your NAMESPACE file.
+* checking Rd files ... OK
+* checking Rd metadata ... OK
+* checking Rd cross-references ... OK
+* checking for missing documentation entries ... WARNING
+Undocumented code objects:
+  ‘downup_data’ ‘favara_bootstrap_1M’ ‘favara_stata’
+Undocumented data sets:
+  ‘downup_data’ ‘favara_bootstrap_1M’ ‘favara_stata’
+All user-level objects in a package should have documentation entries.
+See chapter ‘Writing R documentation files’ in the ‘Writing R
+Extensions’ manual.
+* checking for code/documentation mismatches ... OK
+* checking Rd \usage sections ... OK
+* checking Rd contents ... OK
+* checking for unstated dependencies in examples ... OK
+* checking contents of ‘data’ directory ... WARNING
+Files not of a type allowed in a ‘data’ directory:
+  ‘benchmark_1M_results.xlsx’ ‘benchmark_results_optimized.xlsx’
+  ‘trends_lin_test_results.xlsx’
+Please use e.g. ‘inst/extdata’ for non-R data files
+
+* checking data for non-ASCII characters ... OK
+* checking LazyData ... WARNING
+  LazyData DB of 152.3 MB without LazyDataCompression set
+  See §1.1.6 of 'Writing R Extensions'
+* checking data for ASCII and uncompressed saves ... OK
+* checking line endings in C/C++/Fortran sources/headers ... OK
+* checking compiled code ... OK
+* checking examples ... OK
+* checking for unstated dependencies in ‘tests’ ... WARNING
+'::' or ':::' imports not declared from:
+  ‘DIDmultiplegtDYN’ ‘devtools’
+'library' or 'require' calls not declared from:
+  ‘DIDmultiplegtDYN’ ‘devtools’ ‘writexl’
+* checking tests ... SKIPPED
+* DONE
+Status: 5 WARNINGs, 2 NOTEs
