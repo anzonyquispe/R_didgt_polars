@@ -1321,3 +1321,382 @@ pl_case_when <- function(df, col_name, conditions, values, default = NA_real_) {
 
   df$with_columns(expr$alias(col_name))
 }
+
+# ============================================================================
+# ADDITIONAL HELPERS FOR CORE OPTIMIZATION
+# ============================================================================
+
+#' Get factor levels from polars DataFrame column
+#' @param df polars DataFrame
+#' @param col_name column name
+#' @return character vector of unique sorted values
+#' @noRd
+pl_factor_levels <- function(df, col_name) {
+  result <- df$select(pl$col(col_name)$unique()$sort()$drop_nulls())
+  as.character(result$to_data_frame()[[1]])
+}
+
+#' Batch create NULL columns efficiently
+#' @param df polars DataFrame
+#' @param col_patterns list of patterns with sprintf-style format and range
+#' @param range numeric vector for the range
+#' @return polars DataFrame with columns dropped
+#' @noRd
+pl_batch_drop_cols <- function(df, col_names) {
+  existing <- intersect(col_names, df$columns)
+  if (length(existing) > 0) {
+    df$drop(existing)
+  } else {
+    df
+  }
+}
+
+#' Create multiple lag difference columns efficiently
+#' @param df polars DataFrame (must be sorted by group and time)
+#' @param col_name source column for differences
+#' @param lags vector of lag periods
+#' @param by_col grouping column
+#' @param prefix prefix for new column names (result: prefix1, prefix2, etc.)
+#' @return polars DataFrame with new difference columns
+#' @noRd
+pl_multi_lag_diff <- function(df, col_name, lags, by_col, prefix = "diff_y_") {
+  exprs <- lapply(lags, function(lag) {
+    (pl$col(col_name) - pl$col(col_name)$shift(lag)$over(by_col))$alias(paste0(prefix, lag, "_XX"))
+  })
+  do.call(df$with_columns, exprs)
+}
+
+#' Compute conditional aggregation over groups using filter approach
+#' @param df polars DataFrame
+#' @param value_col column to aggregate
+#' @param filter_expr polars expression for filter
+#' @param by_cols grouping columns
+#' @param new_col name for result
+#' @param agg_func aggregation function name
+#' @return polars DataFrame
+#' @noRd
+pl_filtered_agg_over <- function(df, value_col, filter_expr, by_cols, new_col, agg_func = "sum") {
+  # Remove existing column if present
+  if (new_col %in% df$columns) {
+    df <- df$drop(new_col)
+  }
+
+  # Create masked column
+  masked <- pl$when(filter_expr)$then(pl$col(value_col))$otherwise(pl$lit(NA_real_))
+
+  # Apply aggregation over groups
+  agg_expr <- switch(agg_func,
+    "sum" = masked$sum(),
+    "mean" = masked$mean(),
+    "count" = pl$when(filter_expr)$then(pl$lit(1L))$otherwise(pl$lit(NA_integer_))$sum(),
+    masked$sum()
+  )
+
+  over_expr <- pl_over_cols(agg_expr, by_cols)$alias(new_col)
+  df$with_columns(over_expr)
+}
+
+#' Compute sum by multiple grouping columns
+#' @param df polars DataFrame
+#' @param value_col column to sum
+#' @param by_cols vector of grouping column names
+#' @param new_col name for result column
+#' @return polars DataFrame
+#' @noRd
+pl_sum_over <- function(df, value_col, by_cols, new_col) {
+  if (new_col %in% df$columns) {
+    df <- df$drop(new_col)
+  }
+  over_expr <- pl_over_cols(pl$col(value_col)$sum(), by_cols)$alias(new_col)
+  df$with_columns(over_expr)
+}
+
+#' Compute mean by multiple grouping columns
+#' @param df polars DataFrame
+#' @param value_col column to average
+#' @param by_cols vector of grouping column names
+#' @param new_col name for result column
+#' @return polars DataFrame
+#' @noRd
+pl_mean_over <- function(df, value_col, by_cols, new_col) {
+  if (new_col %in% df$columns) {
+    df <- df$drop(new_col)
+  }
+  over_expr <- pl_over_cols(pl$col(value_col)$mean(), by_cols)$alias(new_col)
+  df$with_columns(over_expr)
+}
+
+#' Create group ID (similar to data.table's .GRP)
+#' @param df polars DataFrame
+#' @param by_cols columns to group by
+#' @param new_col name for new column
+#' @return polars DataFrame
+#' @noRd
+pl_grp_id <- function(df, by_cols, new_col) {
+  if (new_col %in% df$columns) {
+    df <- df$drop(new_col)
+  }
+
+  # Get unique combinations with row index
+  unique_groups <- df$select(by_cols)$unique()$with_row_index("__temp_grp_id__")
+
+  # Join back
+  df <- df$join(unique_groups, on = by_cols, how = "left")
+  df <- df$with_columns(pl$col("__temp_grp_id__")$cast(pl$Int64)$alias(new_col))
+  df$drop("__temp_grp_id__")
+}
+
+#' Apply fifelse logic (polars equivalent)
+#' @param df polars DataFrame
+#' @param new_col new column name
+#' @param condition polars expression
+#' @param true_val value when TRUE (scalar or expression)
+#' @param false_val value when FALSE (scalar or expression)
+#' @return polars DataFrame
+#' @noRd
+pl_fifelse <- function(df, new_col, condition, true_val, false_val) {
+  true_expr <- if (inherits(true_val, "RPolarsExpr")) true_val else pl$lit(true_val)
+  false_expr <- if (inherits(false_val, "RPolarsExpr")) false_val else pl$lit(false_val)
+
+  df$with_columns(
+    pl$when(condition)$then(true_expr)$otherwise(false_expr)$alias(new_col)
+  )
+}
+
+#' Compute scalar sum from filtered DataFrame
+#' @param df polars DataFrame
+#' @param col_name column to sum
+#' @param filter_expr optional filter expression
+#' @return numeric scalar
+#' @noRd
+pl_scalar_sum <- function(df, col_name, filter_expr = NULL) {
+  if (!is.null(filter_expr)) {
+    df <- df$filter(filter_expr)
+  }
+  result <- df$select(pl$col(col_name)$sum())$to_data_frame()[[1]]
+  if (is.null(result) || length(result) == 0 || is.na(result)) 0 else result
+}
+
+#' Compute scalar mean from filtered and grouped DataFrame
+#' @param df polars DataFrame
+#' @param col_name column to average
+#' @param filter_expr filter expression
+#' @param by_col grouping column for intermediate aggregation
+#' @return numeric scalar (sum of group means)
+#' @noRd
+pl_scalar_mean_sum <- function(df, col_name, filter_expr, by_col) {
+  result <- df$filter(filter_expr)$
+    group_by(by_col)$
+    agg(pl$col(col_name)$mean()$alias("__m__"))$
+    select(pl$col("__m__")$sum())$
+    to_data_frame()[[1]]
+  if (is.null(result) || length(result) == 0 || is.na(result)) 0 else result
+}
+
+#' Batch initialize columns to zero
+#' @param df polars DataFrame
+#' @param col_names vector of column names
+#' @return polars DataFrame
+#' @noRd
+pl_init_zero_cols <- function(df, col_names) {
+  exprs <- lapply(col_names, function(col) pl$lit(0.0)$alias(col))
+  do.call(df$with_columns, exprs)
+}
+
+#' Batch initialize columns to NA
+#' @param df polars DataFrame
+#' @param col_names vector of column names
+#' @return polars DataFrame
+#' @noRd
+pl_init_na_cols <- function(df, col_names) {
+  exprs <- lapply(col_names, function(col) pl$lit(NA_real_)$alias(col))
+  do.call(df$with_columns, exprs)
+}
+
+#' Conditional update: set col to expr where condition, keep original otherwise
+#' @param df polars DataFrame
+#' @param col_name column to update
+#' @param condition polars expression
+#' @param new_value new value (scalar or expression)
+#' @return polars DataFrame
+#' @noRd
+pl_conditional_update <- function(df, col_name, condition, new_value) {
+  new_expr <- if (inherits(new_value, "RPolarsExpr")) new_value else pl$lit(new_value)
+  existing <- if (col_name %in% df$columns) pl$col(col_name) else pl$lit(NA_real_)
+
+  df$with_columns(
+    pl$when(condition)$then(new_expr)$otherwise(existing)$alias(col_name)
+  )
+}
+
+#' Compute uniqueN over groups (count distinct values)
+#' @param df polars DataFrame
+#' @param count_col column to count unique values
+#' @param by_cols grouping columns
+#' @param new_col result column name
+#' @param filter_expr optional filter condition
+#' @return polars DataFrame
+#' @noRd
+pl_uniqueN_over <- function(df, count_col, by_cols, new_col, filter_expr = NULL) {
+  if (new_col %in% df$columns) {
+    df <- df$drop(new_col)
+  }
+
+  if (!is.null(filter_expr)) {
+    # Masked unique count
+    masked <- pl$when(filter_expr)$then(pl$col(count_col))$otherwise(pl$lit(NA))
+    over_expr <- pl_over_cols(masked$n_unique(), by_cols)$alias(new_col)
+  } else {
+    over_expr <- pl_over_cols(pl$col(count_col)$n_unique(), by_cols)$alias(new_col)
+  }
+
+  df$with_columns(over_expr)
+}
+
+#' Compute DOF correction factor: sqrt(n/(n-1)) where n > 1, else 1
+#' @param df polars DataFrame
+#' @param dof_col column with DOF values
+#' @param new_col result column name
+#' @return polars DataFrame
+#' @noRd
+pl_dof_correction_col <- function(df, dof_col, new_col) {
+  df$with_columns(
+    pl$when(pl$col(dof_col) > 1)$
+      then((pl$col(dof_col) / (pl$col(dof_col) - 1))$sqrt())$
+      otherwise(pl$lit(1.0))$
+      alias(new_col)
+  )
+}
+
+#' Create column from expression
+#' @param df polars DataFrame
+#' @param col_name new column name
+#' @param expr polars expression
+#' @return polars DataFrame
+#' @noRd
+pl_with_col <- function(df, col_name, expr) {
+  df$with_columns(expr$alias(col_name))
+}
+
+#' Multiply column by scalar or another column
+#' @param df polars DataFrame
+#' @param new_col result column name
+#' @param col1 first column name
+#' @param col2_or_scalar second column name or numeric scalar
+#' @return polars DataFrame
+#' @noRd
+pl_mult <- function(df, new_col, col1, col2_or_scalar) {
+  if (is.numeric(col2_or_scalar)) {
+    expr <- pl$col(col1) * col2_or_scalar
+  } else {
+    expr <- pl$col(col1) * pl$col(col2_or_scalar)
+  }
+  df$with_columns(expr$alias(new_col))
+}
+
+#' Divide column by another column
+#' @param df polars DataFrame
+#' @param new_col result column name
+#' @param numerator numerator column name
+#' @param denominator denominator column name
+#' @return polars DataFrame
+#' @noRd
+pl_div <- function(df, new_col, numerator, denominator) {
+  df$with_columns(
+    (pl$col(numerator) / pl$col(denominator))$alias(new_col)
+  )
+}
+
+#' Subtract columns: col1 - col2
+#' @param df polars DataFrame
+#' @param new_col result column name
+#' @param col1 first column
+#' @param col2 second column
+#' @return polars DataFrame
+#' @noRd
+pl_sub <- function(df, new_col, col1, col2) {
+  df$with_columns(
+    (pl$col(col1) - pl$col(col2))$alias(new_col)
+  )
+}
+
+#' Add columns: col1 + col2
+#' @param df polars DataFrame
+#' @param new_col result column name
+#' @param col1 first column
+#' @param col2 second column
+#' @return polars DataFrame
+#' @noRd
+pl_add_cols <- function(df, new_col, col1, col2) {
+  df$with_columns(
+    (pl$col(col1) + pl$col(col2))$alias(new_col)
+  )
+}
+
+#' Convert polars DataFrame column to R vector
+#' @param df polars DataFrame
+#' @param col_name column name
+#' @return R vector
+#' @noRd
+pl_to_vec <- function(df, col_name) {
+  df$get_column(col_name)$to_r()
+}
+
+#' Get first non-NA value from column
+#' @param df polars DataFrame
+#' @param col_name column name
+#' @return scalar value
+#' @noRd
+pl_first_value <- function(df, col_name) {
+  result <- df$select(pl$col(col_name)$drop_nulls()$first())$to_data_frame()[[1]]
+  if (length(result) == 0) NA else result
+}
+
+#' Compute expression and add as column with over() window
+#' @param df polars DataFrame
+#' @param new_col new column name
+#' @param expr polars expression to compute
+#' @param by_cols columns for over() clause
+#' @return polars DataFrame
+#' @noRd
+pl_expr_over <- function(df, new_col, expr, by_cols) {
+  if (new_col %in% df$columns) {
+    df <- df$drop(new_col)
+  }
+  over_expr <- pl_over_cols(expr, by_cols)$alias(new_col)
+  df$with_columns(over_expr)
+}
+
+#' Create indicator column: 1 where condition TRUE, 0 otherwise (as numeric)
+#' @param df polars DataFrame
+#' @param new_col new column name
+#' @param condition polars expression
+#' @return polars DataFrame
+#' @noRd
+pl_indicator_num <- function(df, new_col, condition) {
+  df$with_columns(
+    condition$cast(pl$Float64)$alias(new_col)
+  )
+}
+
+#' Create indicator column: 1 where condition TRUE, NA otherwise
+#' @param df polars DataFrame
+#' @param new_col new column name
+#' @param condition polars expression
+#' @return polars DataFrame
+#' @noRd
+pl_indicator_na <- function(df, new_col, condition) {
+  df$with_columns(
+    pl$when(condition)$then(pl$lit(1.0))$otherwise(pl$lit(NA_real_))$alias(new_col)
+  )
+}
+
+#' Apply multiple with_columns at once from a list of expressions
+#' @param df polars DataFrame
+#' @param expr_list list of named expressions
+#' @return polars DataFrame
+#' @noRd
+pl_with_cols_list <- function(df, expr_list) {
+  if (length(expr_list) == 0) return(df)
+  do.call(df$with_columns, expr_list)
+}
