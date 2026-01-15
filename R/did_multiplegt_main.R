@@ -1604,26 +1604,63 @@ suppressWarnings({
   }
   rownames <- c()
 
-  ###### 5. Computing the estimators and their variances (OPTIMIZED WITH C++)
-  # Stay in polars and use C++ for heavy computations
-
-  # Helper function to extract polars column as R vector
-  pl_get_col <- function(df, col_name) {
-    as.vector(df$get_column(col_name))
-  }
+  ###### 5. Computing the estimators and their variances (PURE POLARS LAZY EVALUATION)
 
   # Helper function to check if column exists in polars dataframe
   pl_has_col <- function(df, col_name) {
     col_name %in% df$columns
   }
 
-  # Get number of rows
-  n_rows <- df$height
+  # Helper to extract scalar value from polars result
+  pl_scalar <- function(pl_result) {
+    as.data.frame(pl_result)[[1]]
+  }
+
+  # Helper to get scalar sum from polars column with first_obs filter
+  pl_sum_first_obs <- function(df, col_name, first_obs_col = "first_obs_by_gp_XX") {
+    if (!pl_has_col(df, col_name)) return(0)
+    result <- df$lazy()$filter(pl$col(first_obs_col) == 1)$select(pl$col(col_name)$sum())$collect()
+    val <- pl_scalar(result)
+    if (is.null(val) || length(val) == 0 || is.na(val)) return(0)
+    return(val)
+  }
+
+  # Helper to get scalar sum of squared values with first_obs filter
+  pl_sum_sq_first_obs <- function(df, col_name, first_obs_col = "first_obs_by_gp_XX") {
+    if (!pl_has_col(df, col_name)) return(0)
+    result <- df$lazy()$filter(pl$col(first_obs_col) == 1)$select((pl$col(col_name)$pow(2))$sum())$collect()
+    val <- pl_scalar(result)
+    if (is.null(val) || length(val) == 0 || is.na(val)) return(0)
+    return(val)
+  }
+
+  # Helper to count non-NA values with first_obs filter
+  pl_count_first_obs <- function(df, col_name, first_obs_col = "first_obs_by_gp_XX") {
+    if (!pl_has_col(df, col_name)) return(0)
+    result <- df$lazy()$filter(pl$col(first_obs_col) == 1)$select(pl$col(col_name)$is_not_null()$sum())$collect()
+    val <- pl_scalar(result)
+    if (is.null(val) || length(val) == 0 || is.na(val)) return(0)
+    return(val)
+  }
 
   # Creation of the matrix which stores all the estimators (DID_l, DID_pl, delta, etc.), their sd and the CIs
   mat_res_XX <- matrix(NA, nrow = l_XX + l_placebo_XX + 1, ncol = 9)
 
-  # Build weight vectors for all effects
+  # CI level
+  ci_level <- ci_level / 100
+  z_level <- qnorm(ci_level + (1 - ci_level)/2)
+
+  # Handle clustering for variance computation
+  clustered <- !is.null(cluster)
+  first_obs_col <- if (clustered) "first_obs_by_clust_XX" else "first_obs_by_gp_XX"
+  G_var <- if (clustered) {
+    pl_scalar(df$lazy()$select(pl$col("cluster_XX")$n_unique())$collect())
+  } else {
+    G_XX
+  }
+
+  # BATCHED APPROACH: Build all columns first, then aggregate once
+  # Step 1: Build weight vectors
   N1_vec <- numeric(l_XX)
   N0_vec <- numeric(l_XX)
   for (i in 1:l_XX) {
@@ -1631,15 +1668,13 @@ suppressWarnings({
     N0_vec[i] <- get(paste0("N0_", i, "_XX_new"))
   }
 
-  # Extract columns as matrices for C++ (U_Gg plus/minus and counts)
-  U_Gg_plus_mat <- matrix(0, nrow = n_rows, ncol = l_XX)
-  U_Gg_minus_mat <- matrix(0, nrow = n_rows, ncol = l_XX)
-  count_plus_mat <- matrix(NA_real_, nrow = n_rows, ncol = l_XX)
-  count_minus_mat <- matrix(NA_real_, nrow = n_rows, ncol = l_XX)
-  U_Gg_var_in_mat <- matrix(0, nrow = n_rows, ncol = l_XX)
-  U_Gg_var_out_mat <- matrix(0, nrow = n_rows, ncol = l_XX)
-
+  # Step 2: Add all global columns in batched with_columns calls
+  col_exprs <- list()
   for (i in 1:l_XX) {
+    N1_i <- N1_vec[i]
+    N0_i <- N0_vec[i]
+    total_N <- N1_i + N0_i
+
     col_plus <- paste0("U_Gg", i, "_plus_XX")
     col_minus <- paste0("U_Gg", i, "_minus_XX")
     col_count_plus <- paste0("count", i, "_plus_XX")
@@ -1647,176 +1682,182 @@ suppressWarnings({
     col_var_in <- paste0("U_Gg_var_", i, "_in_XX")
     col_var_out <- paste0("U_Gg_var_", i, "_out_XX")
 
-    if (pl_has_col(df, col_plus)) {
-      U_Gg_plus_mat[, i] <- pl_get_col(df, col_plus)
+    # Global variance column
+    if (total_N > 0) {
+      w_in <- N1_i / total_N
+      w_out <- N0_i / total_N
+      var_in_expr <- if (pl_has_col(df, col_var_in)) pl$col(col_var_in)$fill_null(0) else pl$lit(0)
+      var_out_expr <- if (pl_has_col(df, col_var_out)) pl$col(col_var_out)$fill_null(0) else pl$lit(0)
+      col_exprs[[length(col_exprs) + 1]] <- (pl$lit(w_in) * var_in_expr + pl$lit(w_out) * var_out_expr)$alias(paste0("U_Gg_var_glob_", i, "_XX"))
+    } else {
+      col_exprs[[length(col_exprs) + 1]] <- pl$lit(0)$alias(paste0("U_Gg_var_glob_", i, "_XX"))
     }
-    if (pl_has_col(df, col_minus)) {
-      U_Gg_minus_mat[, i] <- pl_get_col(df, col_minus)
+
+    # Global U_Gg column
+    plus_expr <- if (pl_has_col(df, col_plus)) pl$col(col_plus)$fill_null(0) else pl$lit(0)
+    minus_expr <- if (pl_has_col(df, col_minus)) pl$col(col_minus)$fill_null(0) else pl$lit(0)
+    if (total_N > 0) {
+      col_exprs[[length(col_exprs) + 1]] <- (pl$lit(N1_i / total_N) * plus_expr + pl$lit(N0_i / total_N) * minus_expr)$alias(paste0("U_Gg", i, "_global_XX"))
+    } else {
+      col_exprs[[length(col_exprs) + 1]] <- pl$lit(0)$alias(paste0("U_Gg", i, "_global_XX"))
     }
-    if (pl_has_col(df, col_count_plus)) {
-      count_plus_mat[, i] <- pl_get_col(df, col_count_plus)
-    }
-    if (pl_has_col(df, col_count_minus)) {
-      count_minus_mat[, i] <- pl_get_col(df, col_count_minus)
-    }
-    if (pl_has_col(df, col_var_in)) {
-      U_Gg_var_in_mat[, i] <- pl_get_col(df, col_var_in)
-    }
-    if (pl_has_col(df, col_var_out)) {
-      U_Gg_var_out_mat[, i] <- pl_get_col(df, col_var_out)
-    }
+
+    # Global count column
+    count_plus_expr <- if (pl_has_col(df, col_count_plus)) pl$col(col_count_plus) else pl$lit(NA_real_)
+    count_minus_expr <- if (pl_has_col(df, col_count_minus)) pl$col(col_count_minus) else pl$lit(NA_real_)
+    col_exprs[[length(col_exprs) + 1]] <- pl$coalesce(count_plus_expr, count_minus_expr)$alias(paste0("count", i, "_global_XX"))
   }
 
-  first_obs_by_gp <- as.integer(pl_get_col(df, "first_obs_by_gp_XX"))
+  # Apply all column expressions at once
+  df <- do.call(function(...) df$with_columns(...), col_exprs)
 
-  # Compute all DID effects using C++
-  effects_result <- compute_all_effects_cpp(
-    U_Gg_plus_mat,
-    U_Gg_minus_mat,
-    count_plus_mat,
-    count_minus_mat,
-    N1_vec,
-    N0_vec,
-    first_obs_by_gp,
-    G_XX,
-    l_XX
-  )
-
-  DID_estimates <- effects_result$DID_estimates
-  U_Gg_global_mat <- effects_result$U_Gg_global
-  count_global_mat <- effects_result$count_global
-  N_switchers_vec <- effects_result$N_switchers
-  N_effects_vec <- effects_result$N_effects
-
-  # Handle clustering for variance computation
-  clustered <- !is.null(cluster)
-  if (clustered) {
-    first_obs_by_clust <- as.integer(pl_get_col(df, "first_obs_by_clust_XX"))
-    cluster_vec <- as.integer(pl_get_col(df, "cluster_XX"))
-  } else {
-    first_obs_by_clust <- integer(n_rows)
-    cluster_vec <- integer(n_rows)
-  }
-
-  # Compute all variances using C++
-  variances_result <- compute_all_variances_cpp(
-    U_Gg_var_in_mat,
-    U_Gg_var_out_mat,
-    N1_vec,
-    N0_vec,
-    first_obs_by_gp,
-    first_obs_by_clust,
-    cluster_vec,
-    G_XX,
-    l_XX,
-    clustered
-  )
-
-  SE_estimates <- variances_result$SE_estimates
-  U_Gg_var_glob_mat <- variances_result$U_Gg_var_glob
-
-  # CI level
-  ci_level <- ci_level / 100
-  z_level <- qnorm(ci_level + (1 - ci_level)/2)
-
-  # Build delta_D vectors for normalization if needed
-  delta_D_global_vec <- NULL
-  if (normalized == TRUE) {
-    delta_D_global_vec <- numeric(l_XX)
-    for (i in 1:l_XX) {
-      N1_i <- N1_vec[i]
-      N0_i <- N0_vec[i]
-      total_N <- N1_i + N0_i
-      if (total_N > 0) {
-        delta_in <- if (exists(paste0("delta_D_", i, "_in_XX"))) get(paste0("delta_D_", i, "_in_XX")) else 0
-        delta_out <- if (exists(paste0("delta_D_", i, "_out_XX"))) get(paste0("delta_D_", i, "_out_XX")) else 0
-        delta_D_global_vec[i] <- (N1_i / total_N) * delta_in + (N0_i / total_N) * delta_out
-      }
-    }
-  }
-
-  # Store results for each effect
+  # Step 3: Batch all aggregations in a single collect
+  agg_exprs <- list()
   for (i in 1:l_XX) {
-    # Apply normalization if needed
-    DID_i <- DID_estimates[i]
-    SE_i <- SE_estimates[i]
+    col_plus <- paste0("U_Gg", i, "_plus_XX")
+    col_minus <- paste0("U_Gg", i, "_minus_XX")
+    col_var_glob <- paste0("U_Gg_var_glob_", i, "_XX")
+    col_count_global <- paste0("count", i, "_global_XX")
 
-    if (normalized == TRUE && !is.null(delta_D_global_vec) && !is.na(delta_D_global_vec[i]) && delta_D_global_vec[i] != 0) {
-      DID_i <- DID_i / delta_D_global_vec[i]
-      SE_i <- SE_i / delta_D_global_vec[i]
-      assign(paste0("delta_D_", i, "_global_XX"), delta_D_global_vec[i])
+    # Sum of plus column (first_obs filtered)
+    if (pl_has_col(df, col_plus)) {
+      agg_exprs[[length(agg_exprs) + 1]] <- (pl$col(col_plus) * pl$col("first_obs_by_gp_XX"))$sum()$alias(paste0("sum_plus_", i))
+    }
+    # Sum of minus column
+    if (pl_has_col(df, col_minus)) {
+      agg_exprs[[length(agg_exprs) + 1]] <- (pl$col(col_minus) * pl$col("first_obs_by_gp_XX"))$sum()$alias(paste0("sum_minus_", i))
+    }
+    # Sum of squared variance (first_obs filtered for variance)
+    agg_exprs[[length(agg_exprs) + 1]] <- ((pl$col(col_var_glob)$pow(2)) * pl$col(first_obs_col))$sum()$alias(paste0("var_sq_sum_", i))
+    # Count non-null in global count
+    agg_exprs[[length(agg_exprs) + 1]] <- (pl$col(col_count_global)$is_not_null()$cast(pl$Int32) * pl$col("first_obs_by_gp_XX"))$sum()$alias(paste0("count_effects_", i))
+    # Count dw (non-null and > 0)
+    agg_exprs[[length(agg_exprs) + 1]] <- ((pl$col(col_count_global)$is_not_null() & (pl$col(col_count_global) > 0))$cast(pl$Int32))$sum()$alias(paste0("count_dw_", i))
+  }
+
+  # Execute all aggregations in one collect
+  agg_result <- do.call(function(...) df$lazy()$select(...)$collect(), agg_exprs)
+  agg_df <- as.data.frame(agg_result)
+
+  # Step 4: Process results for each effect
+  for (i in 1:l_XX) {
+    N1_i <- N1_vec[i]
+    N0_i <- N0_vec[i]
+    total_N <- N1_i + N0_i
+
+    col_plus <- paste0("U_Gg", i, "_plus_XX")
+    col_minus <- paste0("U_Gg", i, "_minus_XX")
+
+    # Get aggregated values
+    sum_plus <- if (paste0("sum_plus_", i) %in% names(agg_df)) agg_df[[paste0("sum_plus_", i)]] else 0
+    sum_minus <- if (paste0("sum_minus_", i) %in% names(agg_df)) agg_df[[paste0("sum_minus_", i)]] else 0
+    var_sq_sum <- agg_df[[paste0("var_sq_sum_", i)]]
+    N_effects_i <- agg_df[[paste0("count_effects_", i)]]
+    count_global_dw <- agg_df[[paste0("count_dw_", i)]]
+
+    if (is.na(sum_plus)) sum_plus <- 0
+    if (is.na(sum_minus)) sum_minus <- 0
+    if (is.na(var_sq_sum)) var_sq_sum <- 0
+    if (is.na(N_effects_i)) N_effects_i <- 0
+    if (is.na(count_global_dw)) count_global_dw <- 0
+
+    # Compute DID estimate
+    if (total_N > 0) {
+      DID_i <- (N1_i * sum_plus / G_XX + N0_i * sum_minus / G_XX) / total_N
+    } else {
+      DID_i <- NA
+    }
+
+    # Compute SE
+    if (total_N > 0 && var_sq_sum > 0) {
+      SE_i <- sqrt(var_sq_sum) / G_var
+    } else {
+      SE_i <- NA
+    }
+
+    N_switchers_i <- N1_i + N0_i
+
+    # Handle normalization
+    if (normalized == TRUE && total_N > 0) {
+      delta_in <- if (exists(paste0("delta_D_", i, "_in_XX"))) get(paste0("delta_D_", i, "_in_XX")) else 0
+      delta_out <- if (exists(paste0("delta_D_", i, "_out_XX"))) get(paste0("delta_D_", i, "_out_XX")) else 0
+      delta_D_global <- (N1_i / total_N) * delta_in + (N0_i / total_N) * delta_out
+
+      if (delta_D_global != 0 && !is.na(delta_D_global)) {
+        DID_i <- DID_i / delta_D_global
+        SE_i <- SE_i / delta_D_global
+        assign(paste0("delta_D_", i, "_global_XX"), delta_D_global)
+      }
     }
 
     # Check if effect can be estimated
-    N1_i <- N1_vec[i]
-    N0_i <- N0_vec[i]
     if ((switchers == "" && N1_i == 0 && N0_i == 0) ||
         (switchers == "out" && N0_i == 0) ||
         (switchers == "in" && N1_i == 0)) {
       DID_i <- NA
     }
 
-    # Store in results
+    # Store results
     assign(paste0("DID_", i, "_XX"), DID_i)
     assign(paste0("Effect_", i), DID_i)
     assign(paste0("se_", i, "_XX"), SE_i)
     assign(paste0("se_effect_", i), SE_i)
-    assign(paste0("N_switchers_effect_", i, "_XX"), N_switchers_vec[i])
-    assign(paste0("N_switchers_effect_", i), N_switchers_vec[i])
-    assign(paste0("N_effect_", i, "_XX"), N_effects_vec[i])
-    assign(paste0("N_effect_", i), N_effects_vec[i])
+    assign(paste0("N_switchers_effect_", i, "_XX"), N_switchers_i)
+    assign(paste0("N_switchers_effect_", i), N_switchers_i)
+    assign(paste0("N_effect_", i, "_XX"), N_effects_i)
+    assign(paste0("N_effect_", i), N_effects_i)
 
-    # Get N_dw values from existing variables
+    # Get N_dw values
     N1_dw <- if (exists(paste0("N1_dw_", i, "_XX"))) get(paste0("N1_dw_", i, "_XX")) else 0
     N0_dw <- if (exists(paste0("N0_dw_", i, "_XX"))) get(paste0("N0_dw_", i, "_XX")) else 0
     assign(paste0("N_switchers_effect_", i, "_dwXX"), N1_dw + N0_dw)
-
-    # Count dw
-    count_global_dw <- sum(!is.na(count_global_mat[, i]) & count_global_mat[, i] > 0, na.rm = TRUE)
     assign(paste0("N_effect_", i, "_dwXX"), count_global_dw)
 
     # Store in matrix
     mat_res_XX[i, 1] <- DID_i
     mat_res_XX[i, 2] <- SE_i
-    mat_res_XX[i, 3] <- DID_i - z_level * SE_i  # LB_CI
-    mat_res_XX[i, 4] <- DID_i + z_level * SE_i  # UB_CI
+    mat_res_XX[i, 3] <- if (!is.na(DID_i) && !is.na(SE_i)) DID_i - z_level * SE_i else NA
+    mat_res_XX[i, 4] <- if (!is.na(DID_i) && !is.na(SE_i)) DID_i + z_level * SE_i else NA
     mat_res_XX[i, 5] <- count_global_dw
     mat_res_XX[i, 6] <- N1_dw + N0_dw
-    mat_res_XX[i, 7] <- N_effects_vec[i]
-    mat_res_XX[i, 8] <- N_switchers_vec[i]
+    mat_res_XX[i, 7] <- N_effects_i
+    mat_res_XX[i, 8] <- N_switchers_i
     mat_res_XX[i, 9] <- i
 
     rownames <- append(rownames, paste0("Effect_", i, strrep(" ", (12 - nchar(paste0("Effect_", i))))))
 
     # Error message if DID_l cannot be estimated
-    if (N_switchers_vec[i] == 0 || N_effects_vec[i] == 0) {
+    if (N_switchers_i == 0 || N_effects_i == 0) {
       message(paste0("Effect_", i, " cannot be estimated. There is no switcher or no control for this effect."))
     }
   }
 
-  # Add U_Gg_global columns back to df for later use (needed for covariance)
+  # Add count_dw columns to df for later use
   for (i in 1:l_XX) {
-    df <- df$with_columns(pl$lit(U_Gg_global_mat[, i])$alias(paste0("U_Gg", i, "_global_XX")))
-    df <- df$with_columns(pl$lit(count_global_mat[, i])$alias(paste0("count", i, "_global_XX")))
-    df <- df$with_columns(pl$lit(as.numeric(!is.na(count_global_mat[, i]) & count_global_mat[, i] > 0))$alias(paste0("count", i, "_global_dwXX")))
-    df <- df$with_columns(pl$lit(U_Gg_var_glob_mat[, i])$alias(paste0("U_Gg_var_glob_", i, "_XX")))
+    count_global_col <- paste0("count", i, "_global_XX")
+    df <- df$with_columns(
+      pl$when(pl$col(count_global_col)$is_not_null() & (pl$col(count_global_col) > 0))$then(1)$otherwise(0)$alias(paste0("count", i, "_global_dwXX"))
+    )
   }
 
   ###### Computing the average total effect
   U_Gg_den_plus_XX <- 0
   U_Gg_den_minus_XX <- 0
   if (pl_has_col(df, "U_Gg_den_plus_XX")) {
-    U_Gg_den_plus_XX <- mean(pl_get_col(df, "U_Gg_den_plus_XX"), na.rm = TRUE)
-    if (is.na(U_Gg_den_plus_XX)) U_Gg_den_plus_XX <- 0
+    result <- pl_scalar(df$lazy()$select(pl$col("U_Gg_den_plus_XX")$mean())$collect())
+    U_Gg_den_plus_XX <- if (is.na(result) || is.null(result)) 0 else result
   }
   if (pl_has_col(df, "U_Gg_den_minus_XX")) {
-    U_Gg_den_minus_XX <- mean(pl_get_col(df, "U_Gg_den_minus_XX"), na.rm = TRUE)
-    if (is.na(U_Gg_den_minus_XX)) U_Gg_den_minus_XX <- 0
+    result <- pl_scalar(df$lazy()$select(pl$col("U_Gg_den_minus_XX")$mean())$collect())
+    U_Gg_den_minus_XX <- if (is.na(result) || is.null(result)) 0 else result
   }
 
   #### The average effect cannot be estimated when the trends_lin option is specified
   if (isFALSE(trends_lin)) {
     ## Computing the weight w_+
+    sum_N1_l_XX <- sum(sapply(1:l_XX, function(i) get(paste0("N1_", i, "_XX_new"))))
+    sum_N0_l_XX <- sum(sapply(1:l_XX, function(i) get(paste0("N0_", i, "_XX_new"))))
+
     if (switchers == "") {
       denom <- U_Gg_den_plus_XX * sum_N1_l_XX + U_Gg_den_minus_XX * sum_N0_l_XX
       w_plus_XX <- if (denom > 0) U_Gg_den_plus_XX * sum_N1_l_XX / denom else 0.5
@@ -1826,27 +1867,29 @@ suppressWarnings({
       w_plus_XX <- 1
     }
 
-    # Get U_Gg vectors for average effect using C++
-    U_Gg_plus_vec <- if (pl_has_col(df, "U_Gg_plus_XX")) pl_get_col(df, "U_Gg_plus_XX") else rep(0, n_rows)
-    U_Gg_minus_vec <- if (pl_has_col(df, "U_Gg_minus_XX")) pl_get_col(df, "U_Gg_minus_XX") else rep(0, n_rows)
-    U_Gg_var_plus_vec <- if (pl_has_col(df, "U_Gg_var_plus_XX")) pl_get_col(df, "U_Gg_var_plus_XX") else rep(0, n_rows)
-    U_Gg_var_minus_vec <- if (pl_has_col(df, "U_Gg_var_minus_XX")) pl_get_col(df, "U_Gg_var_minus_XX") else rep(0, n_rows)
+    # Compute average effect using polars
+    plus_expr <- if (pl_has_col(df, "U_Gg_plus_XX")) pl$col("U_Gg_plus_XX")$fill_null(0) else pl$lit(0)
+    minus_expr <- if (pl_has_col(df, "U_Gg_minus_XX")) pl$col("U_Gg_minus_XX")$fill_null(0) else pl$lit(0)
 
-    avg_result <- compute_avg_effect_cpp(
-      U_Gg_plus_vec,
-      U_Gg_minus_vec,
-      U_Gg_var_plus_vec,
-      U_Gg_var_minus_vec,
-      first_obs_by_gp,
-      first_obs_by_clust,
-      cluster_vec,
-      w_plus_XX,
-      G_XX,
-      clustered
+    df <- df$with_columns(
+      (pl$lit(w_plus_XX) * plus_expr + pl$lit(1 - w_plus_XX) * minus_expr)$alias("U_Gg_global_XX")
     )
 
-    delta_XX <- avg_result$delta_XX
-    se_XX <- avg_result$se_XX
+    # Sum for average effect
+    sum_avg <- pl_sum_first_obs(df, "U_Gg_global_XX")
+    delta_XX <- sum_avg / G_XX
+
+    # Variance for average effect
+    var_plus_expr <- if (pl_has_col(df, "U_Gg_var_plus_XX")) pl$col("U_Gg_var_plus_XX")$fill_null(0) else pl$lit(0)
+    var_minus_expr <- if (pl_has_col(df, "U_Gg_var_minus_XX")) pl$col("U_Gg_var_minus_XX")$fill_null(0) else pl$lit(0)
+
+    df <- df$with_columns(
+      (pl$lit(w_plus_XX) * var_plus_expr + pl$lit(1 - w_plus_XX) * var_minus_expr)$alias("U_Gg_var_global_XX")
+    )
+
+    var_sum_avg <- pl_sum_sq_first_obs(df, "U_Gg_var_global_XX", first_obs_col)
+    se_XX <- sqrt(var_sum_avg) / G_var
+
     assign("Av_tot_effect", delta_XX)
     assign("se_avg_total_effect", se_XX)
 
@@ -1857,120 +1900,116 @@ suppressWarnings({
     mat_res_XX[l_XX + 1, 4] <- delta_XX + z_level * se_XX
 
     # Count switchers
-    N_switchers_effect_XX <- sum(N_switchers_vec)
+    N_switchers_effect_XX <- sum(sapply(1:l_XX, function(i) get(paste0("N_switchers_effect_", i, "_XX"))))
     N_switchers_effect_dwXX <- sum(sapply(1:l_XX, function(i) get(paste0("N_switchers_effect_", i, "_dwXX"))))
     mat_res_XX[l_XX + 1, 8] <- N_switchers_effect_XX
     mat_res_XX[l_XX + 1, 6] <- N_switchers_effect_dwXX
     mat_res_XX[l_XX + 1, 9] <- 0
     assign("N_switchers_effect_average", N_switchers_effect_XX)
 
+    # Build count_global using polars coalesce across all effect counts
+    count_exprs <- lapply(1:l_XX, function(i) pl$col(paste0("count", i, "_global_XX")))
+    df <- df$with_columns(
+      do.call(pl$coalesce, count_exprs)$alias("count_global_XX")
+    )
+
     # Count observations
-    count_global_vec <- apply(count_global_mat, 1, function(x) max(x, na.rm = TRUE))
-    count_global_vec[is.infinite(count_global_vec)] <- NA
-    N_effect_XX <- sum(count_global_vec, na.rm = TRUE)
-    N_effect_dwXX <- sum(!is.na(count_global_vec) & count_global_vec > 0, na.rm = TRUE)
+    N_effect_XX <- pl_scalar(df$lazy()$filter(pl$col("first_obs_by_gp_XX") == 1)$select(pl$col("count_global_XX")$sum())$collect())
+    N_effect_dwXX <- pl_scalar(df$lazy()$filter(pl$col("first_obs_by_gp_XX") == 1 & pl$col("count_global_XX")$is_not_null() & (pl$col("count_global_XX") > 0))$select(pl$len())$collect())
+
+    if (is.null(N_effect_XX) || is.na(N_effect_XX)) N_effect_XX <- 0
+    if (is.null(N_effect_dwXX) || is.na(N_effect_dwXX)) N_effect_dwXX <- 0
+
     mat_res_XX[l_XX + 1, 7] <- N_effect_XX
     mat_res_XX[l_XX + 1, 5] <- N_effect_dwXX
     assign("N_avg_total_effect", N_effect_XX)
-
-    # Add columns to df
-    df <- df$with_columns(pl$lit(avg_result$U_Gg_global)$alias("U_Gg_global_XX"))
-    df <- df$with_columns(pl$lit(count_global_vec)$alias("count_global_XX"))
   }
   rownames <- append(rownames, paste0("Av_tot_eff", strrep(" ", (12 - nchar("Av_tot_eff")))))
   mat_res_XX[l_XX + 1, 9] <- 0
 
-  #### Computing the placebo estimators using C++
+  #### Computing the placebo estimators using pure polars
   if (l_placebo_XX != 0) {
-    # Build placebo weight vectors
-    N1_pl_vec <- numeric(l_placebo_XX)
-    N0_pl_vec <- numeric(l_placebo_XX)
     for (i in 1:l_placebo_XX) {
-      N1_pl_vec[i] <- if (exists(paste0("N1_placebo_", i, "_XX_new"))) get(paste0("N1_placebo_", i, "_XX_new")) else 0
-      N0_pl_vec[i] <- if (exists(paste0("N0_placebo_", i, "_XX_new"))) get(paste0("N0_placebo_", i, "_XX_new")) else 0
-    }
+      N1_pl_i <- if (exists(paste0("N1_placebo_", i, "_XX_new"))) get(paste0("N1_placebo_", i, "_XX_new")) else 0
+      N0_pl_i <- if (exists(paste0("N0_placebo_", i, "_XX_new"))) get(paste0("N0_placebo_", i, "_XX_new")) else 0
+      total_N_pl <- N1_pl_i + N0_pl_i
 
-    # Extract placebo columns as matrices
-    U_Gg_pl_plus_mat <- matrix(0, nrow = n_rows, ncol = l_placebo_XX)
-    U_Gg_pl_minus_mat <- matrix(0, nrow = n_rows, ncol = l_placebo_XX)
-    count_pl_plus_mat <- matrix(NA_real_, nrow = n_rows, ncol = l_placebo_XX)
-    count_pl_minus_mat <- matrix(NA_real_, nrow = n_rows, ncol = l_placebo_XX)
-    U_Gg_var_pl_in_mat <- matrix(0, nrow = n_rows, ncol = l_placebo_XX)
-    U_Gg_var_pl_out_mat <- matrix(0, nrow = n_rows, ncol = l_placebo_XX)
-
-    for (i in 1:l_placebo_XX) {
+      # Column names
       col_plus <- paste0("U_Gg_pl_", i, "_plus_XX")
       col_minus <- paste0("U_Gg_pl_", i, "_minus_XX")
-      col_count_plus <- paste0("count", i, "_pl_plus_XX")
-      col_count_minus <- paste0("count", i, "_pl_minus_XX")
       col_var_in <- paste0("U_Gg_var_pl_", i, "_in_XX")
       col_var_out <- paste0("U_Gg_var_pl_", i, "_out_XX")
+      col_count_plus <- paste0("count", i, "_pl_plus_XX")
+      col_count_minus <- paste0("count", i, "_pl_minus_XX")
 
-      if (pl_has_col(df, col_plus)) U_Gg_pl_plus_mat[, i] <- pl_get_col(df, col_plus)
-      if (pl_has_col(df, col_minus)) U_Gg_pl_minus_mat[, i] <- pl_get_col(df, col_minus)
-      if (pl_has_col(df, col_count_plus)) count_pl_plus_mat[, i] <- pl_get_col(df, col_count_plus)
-      if (pl_has_col(df, col_count_minus)) count_pl_minus_mat[, i] <- pl_get_col(df, col_count_minus)
-      if (pl_has_col(df, col_var_in)) U_Gg_var_pl_in_mat[, i] <- pl_get_col(df, col_var_in)
-      if (pl_has_col(df, col_var_out)) U_Gg_var_pl_out_mat[, i] <- pl_get_col(df, col_var_out)
-    }
+      # Compute weighted placebo DID estimate
+      sum_plus <- pl_sum_first_obs(df, col_plus)
+      sum_minus <- pl_sum_first_obs(df, col_minus)
 
-    # Compute placebo effects and variances using C++
-    placebo_result <- compute_placebo_effects_and_variances_cpp(
-      U_Gg_pl_plus_mat,
-      U_Gg_pl_minus_mat,
-      count_pl_plus_mat,
-      count_pl_minus_mat,
-      U_Gg_var_pl_in_mat,
-      U_Gg_var_pl_out_mat,
-      N1_pl_vec,
-      N0_pl_vec,
-      first_obs_by_gp,
-      first_obs_by_clust,
-      cluster_vec,
-      G_XX,
-      l_placebo_XX,
-      clustered
-    )
+      if (total_N_pl > 0) {
+        DID_pl_i <- (N1_pl_i * sum_plus / G_XX + N0_pl_i * sum_minus / G_XX) / total_N_pl
+      } else {
+        DID_pl_i <- NA
+      }
 
-    # Store placebo results
-    for (i in 1:l_placebo_XX) {
-      DID_pl_i <- placebo_result$DID_pl_estimates[i]
-      SE_pl_i <- placebo_result$SE_pl_estimates[i]
+      # Compute variance
+      if (total_N_pl > 0) {
+        w_in <- N1_pl_i / total_N_pl
+        w_out <- N0_pl_i / total_N_pl
+
+        var_in_expr <- if (pl_has_col(df, col_var_in)) pl$col(col_var_in)$fill_null(0) else pl$lit(0)
+        var_out_expr <- if (pl_has_col(df, col_var_out)) pl$col(col_var_out)$fill_null(0) else pl$lit(0)
+
+        df <- df$with_columns(
+          (pl$lit(w_in) * var_in_expr + pl$lit(w_out) * var_out_expr)$alias(paste0("U_Gg_var_glob_pl_", i, "_XX"))
+        )
+
+        var_sum_pl <- pl_sum_sq_first_obs(df, paste0("U_Gg_var_glob_pl_", i, "_XX"), first_obs_col)
+        SE_pl_i <- sqrt(var_sum_pl) / G_var
+      } else {
+        SE_pl_i <- NA
+        df <- df$with_columns(pl$lit(0)$alias(paste0("U_Gg_var_glob_pl_", i, "_XX")))
+      }
+
+      # Count switchers and effects for placebo
+      N_switchers_pl_i <- N1_pl_i + N0_pl_i
+
+      count_plus_expr <- if (pl_has_col(df, col_count_plus)) pl$col(col_count_plus) else pl$lit(NA_real_)
+      count_minus_expr <- if (pl_has_col(df, col_count_minus)) pl$col(col_count_minus) else pl$lit(NA_real_)
+      df <- df$with_columns(
+        pl$coalesce(count_plus_expr, count_minus_expr)$alias(paste0("count", i, "_pl_global_XX"))
+      )
+      N_effects_pl_i <- pl_count_first_obs(df, paste0("count", i, "_pl_global_XX"))
 
       # Handle normalization
-      if (normalized == TRUE) {
-        N1_i <- N1_pl_vec[i]
-        N0_i <- N0_pl_vec[i]
-        total_N <- N1_i + N0_i
-        if (total_N > 0) {
-          delta_in <- if (exists(paste0("delta_D_pl_", i, "_in_XX"))) get(paste0("delta_D_pl_", i, "_in_XX")) else 0
-          delta_out <- if (exists(paste0("delta_D_pl_", i, "_out_XX"))) get(paste0("delta_D_pl_", i, "_out_XX")) else 0
-          delta_D_pl <- (N1_i / total_N) * delta_in + (N0_i / total_N) * delta_out
-          if (delta_D_pl != 0) {
-            DID_pl_i <- DID_pl_i / delta_D_pl
-            SE_pl_i <- SE_pl_i / delta_D_pl
-            assign(paste0("delta_D_pl_", i, "_global_XX"), delta_D_pl)
-          }
+      if (normalized == TRUE && total_N_pl > 0) {
+        delta_in <- if (exists(paste0("delta_D_pl_", i, "_in_XX"))) get(paste0("delta_D_pl_", i, "_in_XX")) else 0
+        delta_out <- if (exists(paste0("delta_D_pl_", i, "_out_XX"))) get(paste0("delta_D_pl_", i, "_out_XX")) else 0
+        delta_D_pl <- (N1_pl_i / total_N_pl) * delta_in + (N0_pl_i / total_N_pl) * delta_out
+
+        if (delta_D_pl != 0 && !is.na(delta_D_pl)) {
+          DID_pl_i <- DID_pl_i / delta_D_pl
+          SE_pl_i <- SE_pl_i / delta_D_pl
+          assign(paste0("delta_D_pl_", i, "_global_XX"), delta_D_pl)
         }
       }
 
       # Check if placebo can be estimated
-      N1_i <- N1_pl_vec[i]
-      N0_i <- N0_pl_vec[i]
-      if ((switchers == "" && N1_i == 0 && N0_i == 0) ||
-          (switchers == "out" && N0_i == 0) ||
-          (switchers == "in" && N1_i == 0)) {
+      if ((switchers == "" && N1_pl_i == 0 && N0_pl_i == 0) ||
+          (switchers == "out" && N0_pl_i == 0) ||
+          (switchers == "in" && N1_pl_i == 0)) {
         DID_pl_i <- NA
       }
 
+      # Store placebo results
       assign(paste0("DID_placebo_", i, "_XX"), DID_pl_i)
       assign(paste0("Placebo_", i), DID_pl_i)
       assign(paste0("se_placebo_", i, "_XX"), SE_pl_i)
       assign(paste0("se_placebo_", i), SE_pl_i)
-      assign(paste0("N_switchers_placebo_", i, "_XX"), placebo_result$N_switchers_pl[i])
-      assign(paste0("N_switchers_placebo_", i), placebo_result$N_switchers_pl[i])
-      assign(paste0("N_placebo_", i, "_XX"), placebo_result$N_effects_pl[i])
-      assign(paste0("N_placebo_", i), placebo_result$N_effects_pl[i])
+      assign(paste0("N_switchers_placebo_", i, "_XX"), N_switchers_pl_i)
+      assign(paste0("N_switchers_placebo_", i), N_switchers_pl_i)
+      assign(paste0("N_placebo_", i, "_XX"), N_effects_pl_i)
+      assign(paste0("N_placebo_", i), N_effects_pl_i)
 
       # Get N_dw values
       N1_dw_pl <- if (exists(paste0("N1_dw_placebo_", i, "_XX"))) get(paste0("N1_dw_placebo_", i, "_XX")) else 0
@@ -1980,30 +2019,31 @@ suppressWarnings({
       # Store in matrix
       mat_res_XX[l_XX + 1 + i, 1] <- DID_pl_i
       mat_res_XX[l_XX + 1 + i, 2] <- SE_pl_i
-      mat_res_XX[l_XX + 1 + i, 3] <- DID_pl_i - z_level * SE_pl_i
-      mat_res_XX[l_XX + 1 + i, 4] <- DID_pl_i + z_level * SE_pl_i
-      mat_res_XX[l_XX + 1 + i, 5] <- sum(!is.na(count_pl_plus_mat[, i]) | !is.na(count_pl_minus_mat[, i]), na.rm = TRUE)
+      mat_res_XX[l_XX + 1 + i, 3] <- if (!is.na(DID_pl_i) && !is.na(SE_pl_i)) DID_pl_i - z_level * SE_pl_i else NA
+      mat_res_XX[l_XX + 1 + i, 4] <- if (!is.na(DID_pl_i) && !is.na(SE_pl_i)) DID_pl_i + z_level * SE_pl_i else NA
+
+      # Count dw for placebo
+      count_dw_pl <- pl_scalar(df$lazy()$filter(
+        pl$col("first_obs_by_gp_XX") == 1 &
+        (pl$col(col_count_plus)$is_not_null() | pl$col(col_count_minus)$is_not_null())
+      )$select(pl$len())$collect())
+      if (is.null(count_dw_pl) || is.na(count_dw_pl)) count_dw_pl <- 0
+
+      mat_res_XX[l_XX + 1 + i, 5] <- count_dw_pl
       mat_res_XX[l_XX + 1 + i, 6] <- N1_dw_pl + N0_dw_pl
-      mat_res_XX[l_XX + 1 + i, 7] <- placebo_result$N_effects_pl[i]
-      mat_res_XX[l_XX + 1 + i, 8] <- placebo_result$N_switchers_pl[i]
+      mat_res_XX[l_XX + 1 + i, 7] <- N_effects_pl_i
+      mat_res_XX[l_XX + 1 + i, 8] <- N_switchers_pl_i
       mat_res_XX[l_XX + 1 + i, 9] <- -i
 
       rownames <- append(rownames, paste0("Placebo_", i, strrep(" ", (12 - nchar(paste0("Placebo_", i))))))
 
-      if (placebo_result$N_switchers_pl[i] == 0 || placebo_result$N_effects_pl[i] == 0) {
+      if (N_switchers_pl_i == 0 || N_effects_pl_i == 0) {
         message(paste0("Placebo_", i, " cannot be estimated. There is no switcher or no control for this placebo."))
       }
-
-      # Add placebo variance columns to df for covariance computation
-      df <- df$with_columns(pl$lit(placebo_result$U_Gg_var_glob_pl[, i])$alias(paste0("U_Gg_var_glob_pl_", i, "_XX")))
     }
   }
 
-  # NOTE: Variance computation for effects, placebos, and average effect was done above via C++ functions
-  # The SE_estimates and CI values are already stored in mat_res_XX
-
   # Convert df from polars to data.table for section 6 (p-values and joint tests)
-  # This is necessary for the covariance matrix computation which uses data.table syntax
   df <- data.table::as.data.table(as.data.frame(df))
 
   ## Average number of cumulated effects

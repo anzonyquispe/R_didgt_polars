@@ -41,13 +41,13 @@ cat("CRAN version: ", round(t1_cran["elapsed"], 2), "s\n")
 cat("Polars version: ", round(t1_polars["elapsed"], 2), "s\n")
 cat("Speedup: ", round(t1_cran["elapsed"] / t1_polars["elapsed"], 2), "x\n\n")
 
-# Test 2: Bootstrapped to 10,000 observations
-cat("Test 2: Bootstrapped Data (~10,000 observations)\n")
+# Test 2: Bootstrapped to 100,000 observations
+cat("Test 2: Bootstrapped Data (~100,000 observations)\n")
 cat(strrep("-", 40), "\n")
 
 # Bootstrap the data
 set.seed(42)
-n_target <- 10000
+n_target <- 100000
 n_original <- nrow(favara)
 sample_indices <- sample(1:n_original, n_target, replace = TRUE)
 favara_boot <- favara[sample_indices, ]
@@ -83,6 +83,46 @@ t2_polars <- system.time({
 cat("CRAN version: ", round(t2_cran["elapsed"], 2), "s\n")
 cat("Polars version: ", round(t2_polars["elapsed"], 2), "s\n")
 cat("Speedup: ", round(t2_cran["elapsed"] / t2_polars["elapsed"], 2), "x\n\n")
+
+# Test 2b: Bootstrapped to 1,000,000 observations
+cat("Test 2b: Bootstrapped Data (~1,000,000 observations)\n")
+cat(strrep("-", 40), "\n")
+
+set.seed(42)
+n_target <- 1000000
+sample_indices <- sample(1:n_original, n_target, replace = TRUE)
+favara_1m <- favara[sample_indices, ]
+rownames(favara_1m) <- NULL
+
+cat("Actual size: ", nrow(favara_1m), " observations\n")
+
+t2b_cran <- system.time({
+  res_cran_1m <- DIDmultiplegtDYN::did_multiplegt_dyn(
+    df = as.data.frame(favara_1m),
+    outcome = "Dl_vloans_b",
+    group = "county",
+    time = "year",
+    treatment = "inter_bra",
+    effects = 5,
+    placebo = 1
+  )
+})
+
+t2b_polars <- system.time({
+  res_polars_1m <- DIDmultiplegtDYNpolars::did_multiplegt_dyn(
+    df = as.data.frame(favara_1m),
+    outcome = "Dl_vloans_b",
+    group = "county",
+    time = "year",
+    treatment = "inter_bra",
+    effects = 5,
+    placebo = 1
+  )
+})
+
+cat("CRAN version: ", round(t2b_cran["elapsed"], 2), "s\n")
+cat("Polars version: ", round(t2b_polars["elapsed"], 2), "s\n")
+cat("Speedup: ", round(t2b_cran["elapsed"] / t2b_polars["elapsed"], 2), "x\n\n")
 
 # Test 3: With trends_lin option
 cat("Test 3: With trends_lin option\n")
@@ -125,6 +165,7 @@ cat("Effect_1 Polars: ", round(res_polars$coef$b["Effect_1"], 6), "\n")
 cat("Difference: ", abs(res_cran$coef$b["Effect_1"] - res_polars$coef$b["Effect_1"]), "\n\n")
 
 cat("========== SUMMARY ==========\n")
-cat("Original data speedup: ", round(t1_cran["elapsed"] / t1_polars["elapsed"], 2), "x\n")
-cat("Bootstrapped data speedup: ", round(t2_cran["elapsed"] / t2_polars["elapsed"], 2), "x\n")
+cat("Original data (1K) speedup: ", round(t1_cran["elapsed"] / t1_polars["elapsed"], 2), "x\n")
+cat("Bootstrapped (100K) speedup: ", round(t2_cran["elapsed"] / t2_polars["elapsed"], 2), "x\n")
+cat("Bootstrapped (1M) speedup: ", round(t2b_cran["elapsed"] / t2b_polars["elapsed"], 2), "x\n")
 cat("With trends_lin speedup: ", round(t3_cran["elapsed"] / t3_polars["elapsed"], 2), "x\n")
