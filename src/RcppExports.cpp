@@ -293,6 +293,105 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// compute_all_effects_cpp
+List compute_all_effects_cpp(NumericMatrix U_Gg_plus, NumericMatrix U_Gg_minus, NumericMatrix count_plus, NumericMatrix count_minus, NumericVector N1_vec, NumericVector N0_vec, IntegerVector first_obs_by_gp, double G_XX, int l_XX);
+RcppExport SEXP _DIDmultiplegtDYNpolars_compute_all_effects_cpp(SEXP U_Gg_plusSEXP, SEXP U_Gg_minusSEXP, SEXP count_plusSEXP, SEXP count_minusSEXP, SEXP N1_vecSEXP, SEXP N0_vecSEXP, SEXP first_obs_by_gpSEXP, SEXP G_XXSEXP, SEXP l_XXSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericMatrix >::type U_Gg_plus(U_Gg_plusSEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type U_Gg_minus(U_Gg_minusSEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type count_plus(count_plusSEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type count_minus(count_minusSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type N1_vec(N1_vecSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type N0_vec(N0_vecSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type first_obs_by_gp(first_obs_by_gpSEXP);
+    Rcpp::traits::input_parameter< double >::type G_XX(G_XXSEXP);
+    Rcpp::traits::input_parameter< int >::type l_XX(l_XXSEXP);
+    rcpp_result_gen = Rcpp::wrap(compute_all_effects_cpp(U_Gg_plus, U_Gg_minus, count_plus, count_minus, N1_vec, N0_vec, first_obs_by_gp, G_XX, l_XX));
+    return rcpp_result_gen;
+END_RCPP
+}
+// compute_all_variances_cpp
+List compute_all_variances_cpp(NumericMatrix U_Gg_var_in, NumericMatrix U_Gg_var_out, NumericVector N1_vec, NumericVector N0_vec, IntegerVector first_obs_by_gp, IntegerVector first_obs_by_clust, IntegerVector cluster_XX, double G_XX, int l_XX, bool clustered);
+RcppExport SEXP _DIDmultiplegtDYNpolars_compute_all_variances_cpp(SEXP U_Gg_var_inSEXP, SEXP U_Gg_var_outSEXP, SEXP N1_vecSEXP, SEXP N0_vecSEXP, SEXP first_obs_by_gpSEXP, SEXP first_obs_by_clustSEXP, SEXP cluster_XXSEXP, SEXP G_XXSEXP, SEXP l_XXSEXP, SEXP clusteredSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericMatrix >::type U_Gg_var_in(U_Gg_var_inSEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type U_Gg_var_out(U_Gg_var_outSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type N1_vec(N1_vecSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type N0_vec(N0_vecSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type first_obs_by_gp(first_obs_by_gpSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type first_obs_by_clust(first_obs_by_clustSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type cluster_XX(cluster_XXSEXP);
+    Rcpp::traits::input_parameter< double >::type G_XX(G_XXSEXP);
+    Rcpp::traits::input_parameter< int >::type l_XX(l_XXSEXP);
+    Rcpp::traits::input_parameter< bool >::type clustered(clusteredSEXP);
+    rcpp_result_gen = Rcpp::wrap(compute_all_variances_cpp(U_Gg_var_in, U_Gg_var_out, N1_vec, N0_vec, first_obs_by_gp, first_obs_by_clust, cluster_XX, G_XX, l_XX, clustered));
+    return rcpp_result_gen;
+END_RCPP
+}
+// compute_placebo_effects_and_variances_cpp
+List compute_placebo_effects_and_variances_cpp(NumericMatrix U_Gg_pl_plus, NumericMatrix U_Gg_pl_minus, NumericMatrix count_pl_plus, NumericMatrix count_pl_minus, NumericMatrix U_Gg_var_pl_in, NumericMatrix U_Gg_var_pl_out, NumericVector N1_pl_vec, NumericVector N0_pl_vec, IntegerVector first_obs_by_gp, IntegerVector first_obs_by_clust, IntegerVector cluster_XX, double G_XX, int l_placebo_XX, bool clustered);
+RcppExport SEXP _DIDmultiplegtDYNpolars_compute_placebo_effects_and_variances_cpp(SEXP U_Gg_pl_plusSEXP, SEXP U_Gg_pl_minusSEXP, SEXP count_pl_plusSEXP, SEXP count_pl_minusSEXP, SEXP U_Gg_var_pl_inSEXP, SEXP U_Gg_var_pl_outSEXP, SEXP N1_pl_vecSEXP, SEXP N0_pl_vecSEXP, SEXP first_obs_by_gpSEXP, SEXP first_obs_by_clustSEXP, SEXP cluster_XXSEXP, SEXP G_XXSEXP, SEXP l_placebo_XXSEXP, SEXP clusteredSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericMatrix >::type U_Gg_pl_plus(U_Gg_pl_plusSEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type U_Gg_pl_minus(U_Gg_pl_minusSEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type count_pl_plus(count_pl_plusSEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type count_pl_minus(count_pl_minusSEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type U_Gg_var_pl_in(U_Gg_var_pl_inSEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type U_Gg_var_pl_out(U_Gg_var_pl_outSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type N1_pl_vec(N1_pl_vecSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type N0_pl_vec(N0_pl_vecSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type first_obs_by_gp(first_obs_by_gpSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type first_obs_by_clust(first_obs_by_clustSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type cluster_XX(cluster_XXSEXP);
+    Rcpp::traits::input_parameter< double >::type G_XX(G_XXSEXP);
+    Rcpp::traits::input_parameter< int >::type l_placebo_XX(l_placebo_XXSEXP);
+    Rcpp::traits::input_parameter< bool >::type clustered(clusteredSEXP);
+    rcpp_result_gen = Rcpp::wrap(compute_placebo_effects_and_variances_cpp(U_Gg_pl_plus, U_Gg_pl_minus, count_pl_plus, count_pl_minus, U_Gg_var_pl_in, U_Gg_var_pl_out, N1_pl_vec, N0_pl_vec, first_obs_by_gp, first_obs_by_clust, cluster_XX, G_XX, l_placebo_XX, clustered));
+    return rcpp_result_gen;
+END_RCPP
+}
+// compute_vcov_full_cpp
+NumericMatrix compute_vcov_full_cpp(NumericMatrix U_Gg_var_glob, IntegerVector first_obs, NumericVector se_vec, bool normalized, Nullable<NumericVector> delta_D_global_, double G_XX);
+RcppExport SEXP _DIDmultiplegtDYNpolars_compute_vcov_full_cpp(SEXP U_Gg_var_globSEXP, SEXP first_obsSEXP, SEXP se_vecSEXP, SEXP normalizedSEXP, SEXP delta_D_global_SEXP, SEXP G_XXSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericMatrix >::type U_Gg_var_glob(U_Gg_var_globSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type first_obs(first_obsSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type se_vec(se_vecSEXP);
+    Rcpp::traits::input_parameter< bool >::type normalized(normalizedSEXP);
+    Rcpp::traits::input_parameter< Nullable<NumericVector> >::type delta_D_global_(delta_D_global_SEXP);
+    Rcpp::traits::input_parameter< double >::type G_XX(G_XXSEXP);
+    rcpp_result_gen = Rcpp::wrap(compute_vcov_full_cpp(U_Gg_var_glob, first_obs, se_vec, normalized, delta_D_global_, G_XX));
+    return rcpp_result_gen;
+END_RCPP
+}
+// compute_avg_effect_cpp
+List compute_avg_effect_cpp(NumericVector U_Gg_plus, NumericVector U_Gg_minus, NumericVector U_Gg_var_plus, NumericVector U_Gg_var_minus, IntegerVector first_obs_by_gp, IntegerVector first_obs_by_clust, IntegerVector cluster_XX, double w_plus, double G_XX, bool clustered);
+RcppExport SEXP _DIDmultiplegtDYNpolars_compute_avg_effect_cpp(SEXP U_Gg_plusSEXP, SEXP U_Gg_minusSEXP, SEXP U_Gg_var_plusSEXP, SEXP U_Gg_var_minusSEXP, SEXP first_obs_by_gpSEXP, SEXP first_obs_by_clustSEXP, SEXP cluster_XXSEXP, SEXP w_plusSEXP, SEXP G_XXSEXP, SEXP clusteredSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type U_Gg_plus(U_Gg_plusSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type U_Gg_minus(U_Gg_minusSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type U_Gg_var_plus(U_Gg_var_plusSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type U_Gg_var_minus(U_Gg_var_minusSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type first_obs_by_gp(first_obs_by_gpSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type first_obs_by_clust(first_obs_by_clustSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type cluster_XX(cluster_XXSEXP);
+    Rcpp::traits::input_parameter< double >::type w_plus(w_plusSEXP);
+    Rcpp::traits::input_parameter< double >::type G_XX(G_XXSEXP);
+    Rcpp::traits::input_parameter< bool >::type clustered(clusteredSEXP);
+    rcpp_result_gen = Rcpp::wrap(compute_avg_effect_cpp(U_Gg_plus, U_Gg_minus, U_Gg_var_plus, U_Gg_var_minus, first_obs_by_gp, first_obs_by_clust, cluster_XX, w_plus, G_XX, clustered));
+    return rcpp_result_gen;
+END_RCPP
+}
 // same_switchers_loop_cpp
 List same_switchers_loop_cpp(NumericVector outcome, IntegerVector group, IntegerVector time, NumericVector F_g, NumericVector N_gt, IntegerVector d_sq, int effects, int T_max, bool only_never_switchers);
 RcppExport SEXP _DIDmultiplegtDYNpolars_same_switchers_loop_cpp(SEXP outcomeSEXP, SEXP groupSEXP, SEXP timeSEXP, SEXP F_gSEXP, SEXP N_gtSEXP, SEXP d_sqSEXP, SEXP effectsSEXP, SEXP T_maxSEXP, SEXP only_never_switchersSEXP) {
@@ -333,6 +432,11 @@ static const R_CallMethodDef CallEntries[] = {
     {"_DIDmultiplegtDYNpolars_compute_dof_indicator_cpp", (DL_FUNC) &_DIDmultiplegtDYNpolars_compute_dof_indicator_cpp, 5},
     {"_DIDmultiplegtDYNpolars_compute_cohort_mean_cpp", (DL_FUNC) &_DIDmultiplegtDYNpolars_compute_cohort_mean_cpp, 6},
     {"_DIDmultiplegtDYNpolars_count_unique_by_group_cpp", (DL_FUNC) &_DIDmultiplegtDYNpolars_count_unique_by_group_cpp, 5},
+    {"_DIDmultiplegtDYNpolars_compute_all_effects_cpp", (DL_FUNC) &_DIDmultiplegtDYNpolars_compute_all_effects_cpp, 9},
+    {"_DIDmultiplegtDYNpolars_compute_all_variances_cpp", (DL_FUNC) &_DIDmultiplegtDYNpolars_compute_all_variances_cpp, 10},
+    {"_DIDmultiplegtDYNpolars_compute_placebo_effects_and_variances_cpp", (DL_FUNC) &_DIDmultiplegtDYNpolars_compute_placebo_effects_and_variances_cpp, 14},
+    {"_DIDmultiplegtDYNpolars_compute_vcov_full_cpp", (DL_FUNC) &_DIDmultiplegtDYNpolars_compute_vcov_full_cpp, 6},
+    {"_DIDmultiplegtDYNpolars_compute_avg_effect_cpp", (DL_FUNC) &_DIDmultiplegtDYNpolars_compute_avg_effect_cpp, 10},
     {"_DIDmultiplegtDYNpolars_same_switchers_loop_cpp", (DL_FUNC) &_DIDmultiplegtDYNpolars_same_switchers_loop_cpp, 9},
     {NULL, NULL, 0}
 };

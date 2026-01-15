@@ -81,7 +81,7 @@ did_multiplegt_dyn_core <- function(
   is_polars <- inherits(df, "polars_data_frame") || inherits(df, "RPolarsDataFrame")
   if (!is_polars) {
     if (inherits(df, "data.table") || inherits(df, "data.frame")) {
-      df <- pl$DataFrame(as.data.frame(df))
+      df <- as_polars_df(as.data.frame(df))
     } else {
       stop("df must be a polars DataFrame, data.table, or data.frame")
     }

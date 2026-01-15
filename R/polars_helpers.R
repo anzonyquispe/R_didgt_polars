@@ -49,7 +49,7 @@ pl_copy_col <- function(df, target_col, source_col) {
 #' @return R vector
 #' @noRd
 pl_get_col <- function(df, col_name) {
-  df$get_column(col_name)$to_r()
+  as.vector(df$get_column(col_name))
 }
 
 #' Conditional update: set col to new_val where condition is TRUE
@@ -215,7 +215,11 @@ pl_sort <- function(df, by_cols, descending = FALSE) {
 #' @return aggregated polars DataFrame
 #' @noRd
 pl_group_agg <- function(df, by_cols, agg_exprs) {
-  df$group_by(by_cols)$agg(agg_exprs)
+  if (is.list(agg_exprs)) {
+    do.call(function(...) df$group_by(by_cols)$agg(...), agg_exprs)
+  } else {
+    df$group_by(by_cols)$agg(agg_exprs)
+  }
 }
 
 #' Compute window function (sum over groups) and add as new column
@@ -1333,7 +1337,7 @@ pl_case_when <- function(df, col_name, conditions, values, default = NA_real_) {
 #' @noRd
 pl_factor_levels <- function(df, col_name) {
   result <- df$select(pl$col(col_name)$unique()$sort()$drop_nulls())
-  as.character(result$to_data_frame()[[1]])
+  as.character(as.data.frame(result)[[1]])
 }
 
 #' Batch create NULL columns efficiently
@@ -1473,7 +1477,7 @@ pl_scalar_sum <- function(df, col_name, filter_expr = NULL) {
   if (!is.null(filter_expr)) {
     df <- df$filter(filter_expr)
   }
-  result <- df$select(pl$col(col_name)$sum())$to_data_frame()[[1]]
+  result <- as.data.frame(df$select(pl$col(col_name)$sum()))[[1]]
   if (is.null(result) || length(result) == 0 || is.na(result)) 0 else result
 }
 
@@ -1485,11 +1489,12 @@ pl_scalar_sum <- function(df, col_name, filter_expr = NULL) {
 #' @return numeric scalar (sum of group means)
 #' @noRd
 pl_scalar_mean_sum <- function(df, col_name, filter_expr, by_col) {
-  result <- df$filter(filter_expr)$
-    group_by(by_col)$
-    agg(pl$col(col_name)$mean()$alias("__m__"))$
-    select(pl$col("__m__")$sum())$
-    to_data_frame()[[1]]
+  result <- as.data.frame(
+    df$filter(filter_expr)$
+      group_by(by_col)$
+      agg(pl$col(col_name)$mean()$alias("__m__"))$
+      select(pl$col("__m__")$sum())
+  )[[1]]
   if (is.null(result) || length(result) == 0 || is.na(result)) 0 else result
 }
 
@@ -1639,7 +1644,7 @@ pl_add_cols <- function(df, new_col, col1, col2) {
 #' @return R vector
 #' @noRd
 pl_to_vec <- function(df, col_name) {
-  df$get_column(col_name)$to_r()
+  as.vector(df$get_column(col_name))
 }
 
 #' Get first non-NA value from column
@@ -1648,7 +1653,7 @@ pl_to_vec <- function(df, col_name) {
 #' @return scalar value
 #' @noRd
 pl_first_value <- function(df, col_name) {
-  result <- df$select(pl$col(col_name)$drop_nulls()$first())$to_data_frame()[[1]]
+  result <- as.data.frame(df$select(pl$col(col_name)$drop_nulls()$first()))[[1]]
   if (length(result) == 0) NA else result
 }
 

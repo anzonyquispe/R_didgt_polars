@@ -77,6 +77,26 @@ count_unique_by_group_cpp <- function(values, dof_indicator, group1, group2, gro
     .Call(`_DIDmultiplegtDYNpolars_count_unique_by_group_cpp`, values, dof_indicator, group1, group2, group3_)
 }
 
+compute_all_effects_cpp <- function(U_Gg_plus, U_Gg_minus, count_plus, count_minus, N1_vec, N0_vec, first_obs_by_gp, G_XX, l_XX) {
+    .Call(`_DIDmultiplegtDYNpolars_compute_all_effects_cpp`, U_Gg_plus, U_Gg_minus, count_plus, count_minus, N1_vec, N0_vec, first_obs_by_gp, G_XX, l_XX)
+}
+
+compute_all_variances_cpp <- function(U_Gg_var_in, U_Gg_var_out, N1_vec, N0_vec, first_obs_by_gp, first_obs_by_clust, cluster_XX, G_XX, l_XX, clustered) {
+    .Call(`_DIDmultiplegtDYNpolars_compute_all_variances_cpp`, U_Gg_var_in, U_Gg_var_out, N1_vec, N0_vec, first_obs_by_gp, first_obs_by_clust, cluster_XX, G_XX, l_XX, clustered)
+}
+
+compute_placebo_effects_and_variances_cpp <- function(U_Gg_pl_plus, U_Gg_pl_minus, count_pl_plus, count_pl_minus, U_Gg_var_pl_in, U_Gg_var_pl_out, N1_pl_vec, N0_pl_vec, first_obs_by_gp, first_obs_by_clust, cluster_XX, G_XX, l_placebo_XX, clustered) {
+    .Call(`_DIDmultiplegtDYNpolars_compute_placebo_effects_and_variances_cpp`, U_Gg_pl_plus, U_Gg_pl_minus, count_pl_plus, count_pl_minus, U_Gg_var_pl_in, U_Gg_var_pl_out, N1_pl_vec, N0_pl_vec, first_obs_by_gp, first_obs_by_clust, cluster_XX, G_XX, l_placebo_XX, clustered)
+}
+
+compute_vcov_full_cpp <- function(U_Gg_var_glob, first_obs, se_vec, normalized, delta_D_global_ = NULL, G_XX = 1.0) {
+    .Call(`_DIDmultiplegtDYNpolars_compute_vcov_full_cpp`, U_Gg_var_glob, first_obs, se_vec, normalized, delta_D_global_, G_XX)
+}
+
+compute_avg_effect_cpp <- function(U_Gg_plus, U_Gg_minus, U_Gg_var_plus, U_Gg_var_minus, first_obs_by_gp, first_obs_by_clust, cluster_XX, w_plus, G_XX, clustered) {
+    .Call(`_DIDmultiplegtDYNpolars_compute_avg_effect_cpp`, U_Gg_plus, U_Gg_minus, U_Gg_var_plus, U_Gg_var_minus, first_obs_by_gp, first_obs_by_clust, cluster_XX, w_plus, G_XX, clustered)
+}
+
 same_switchers_loop_cpp <- function(outcome, group, time, F_g, N_gt, d_sq, effects, T_max, only_never_switchers) {
     .Call(`_DIDmultiplegtDYNpolars_same_switchers_loop_cpp`, outcome, group, time, F_g, N_gt, d_sq, effects, T_max, only_never_switchers)
 }

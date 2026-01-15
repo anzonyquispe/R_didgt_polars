@@ -1,7 +1,10 @@
 #include <Rcpp.h>
 #include <unordered_map>
+#include <map>
+#include <set>
 #include <vector>
 #include <algorithm>
+#include <cmath>
 using namespace Rcpp;
 
 // [[Rcpp::export]]
@@ -771,6 +774,515 @@ IntegerVector count_unique_by_group_cpp(IntegerVector values,
   }
 
   return result;
+}
+
+// ============================================================================
+// SECTION 5 OPTIMIZATIONS - MAIN.R VARIANCE COMPUTATION
+// ============================================================================
+
+// [[Rcpp::export]]
+List compute_all_effects_cpp(NumericMatrix U_Gg_plus,
+                              NumericMatrix U_Gg_minus,
+                              NumericMatrix count_plus,
+                              NumericMatrix count_minus,
+                              NumericVector N1_vec,
+                              NumericVector N0_vec,
+                              IntegerVector first_obs_by_gp,
+                              double G_XX,
+                              int l_XX) {
+  // Compute all DID_l effects in one pass
+  // U_Gg_plus/minus: n x l_XX matrices of U_Gg values for switchers in/out
+  // count_plus/minus: n x l_XX matrices of count values
+  // N1_vec/N0_vec: weights for each effect (length l_XX)
+  // Returns: DID estimates, counts, and U_Gg_global for each effect
+
+  int n = U_Gg_plus.nrow();
+  NumericMatrix U_Gg_global(n, l_XX);
+  NumericMatrix count_global(n, l_XX);
+  NumericVector DID_estimates(l_XX);
+  NumericVector N_switchers(l_XX);
+  NumericVector N_effects(l_XX);
+
+  for (int i = 0; i < l_XX; i++) {
+    double N1 = N1_vec[i];
+    double N0 = N0_vec[i];
+    double total_N = N1 + N0;
+    N_switchers[i] = total_N;
+
+    if (total_N == 0) {
+      DID_estimates[i] = NA_REAL;
+      continue;
+    }
+
+    double w_plus = N1 / total_N;
+    double w_minus = N0 / total_N;
+
+    double sum_U_Gg = 0.0;
+    double sum_count = 0.0;
+
+    for (int j = 0; j < n; j++) {
+      // Compute U_Gg_global
+      double u_plus = U_Gg_plus(j, i);
+      double u_minus = U_Gg_minus(j, i);
+      double u_global = 0.0;
+
+      if (!NumericVector::is_na(u_plus) && !NumericVector::is_na(u_minus)) {
+        u_global = w_plus * u_plus + w_minus * u_minus;
+      } else if (!NumericVector::is_na(u_plus)) {
+        u_global = w_plus * u_plus;
+      } else if (!NumericVector::is_na(u_minus)) {
+        u_global = w_minus * u_minus;
+      }
+
+      if (first_obs_by_gp[j] == 0) {
+        u_global = NA_REAL;
+      }
+      U_Gg_global(j, i) = u_global;
+
+      // Sum for DID estimate
+      if (!NumericVector::is_na(u_global)) {
+        sum_U_Gg += u_global;
+      }
+
+      // Compute count_global (max of plus and minus)
+      double c_plus = count_plus(j, i);
+      double c_minus = count_minus(j, i);
+      double c_global = NA_REAL;
+
+      if (!NumericVector::is_na(c_plus) && !NumericVector::is_na(c_minus)) {
+        c_global = std::max(c_plus, c_minus);
+      } else if (!NumericVector::is_na(c_plus)) {
+        c_global = c_plus;
+      } else if (!NumericVector::is_na(c_minus)) {
+        c_global = c_minus;
+      }
+
+      if (!NumericVector::is_na(c_global) && c_global > 0) {
+        sum_count += c_global;
+      }
+      count_global(j, i) = c_global;
+    }
+
+    DID_estimates[i] = sum_U_Gg / G_XX;
+    N_effects[i] = sum_count;
+  }
+
+  return List::create(
+    Named("DID_estimates") = DID_estimates,
+    Named("U_Gg_global") = U_Gg_global,
+    Named("count_global") = count_global,
+    Named("N_switchers") = N_switchers,
+    Named("N_effects") = N_effects
+  );
+}
+
+// [[Rcpp::export]]
+List compute_all_variances_cpp(NumericMatrix U_Gg_var_in,
+                                NumericMatrix U_Gg_var_out,
+                                NumericVector N1_vec,
+                                NumericVector N0_vec,
+                                IntegerVector first_obs_by_gp,
+                                IntegerVector first_obs_by_clust,
+                                IntegerVector cluster_XX,
+                                double G_XX,
+                                int l_XX,
+                                bool clustered) {
+  // Compute all variances in one pass
+  // Returns: SE estimates and U_Gg_var_glob for each effect
+
+  int n = U_Gg_var_in.nrow();
+  NumericMatrix U_Gg_var_glob(n, l_XX);
+  NumericVector SE_estimates(l_XX);
+
+  for (int i = 0; i < l_XX; i++) {
+    double N1 = N1_vec[i];
+    double N0 = N0_vec[i];
+    double total_N = N1 + N0;
+
+    if (total_N == 0) {
+      SE_estimates[i] = NA_REAL;
+      continue;
+    }
+
+    double w_plus = N1 / total_N;
+    double w_minus = N0 / total_N;
+
+    // Compute U_Gg_var_glob
+    for (int j = 0; j < n; j++) {
+      double v_in = U_Gg_var_in(j, i);
+      double v_out = U_Gg_var_out(j, i);
+
+      double v_glob = 0.0;
+      if (!NumericVector::is_na(v_in)) {
+        v_glob += w_plus * v_in;
+      }
+      if (!NumericVector::is_na(v_out)) {
+        v_glob += w_minus * v_out;
+      }
+      U_Gg_var_glob(j, i) = v_glob;
+    }
+
+    // Compute variance
+    double sum_sq = 0.0;
+
+    if (!clustered) {
+      // Non-clustered case
+      for (int j = 0; j < n; j++) {
+        if (first_obs_by_gp[j] == 1) {
+          double val = U_Gg_var_glob(j, i);
+          if (!NumericVector::is_na(val)) {
+            sum_sq += val * val;
+          }
+        }
+      }
+    } else {
+      // Clustered case
+      // Step 1: Multiply by first_obs_by_gp
+      std::vector<double> U_masked(n);
+      for (int j = 0; j < n; j++) {
+        U_masked[j] = U_Gg_var_glob(j, i) * first_obs_by_gp[j];
+      }
+
+      // Step 2: Sum within clusters
+      std::map<int, double> cluster_sums;
+      for (int j = 0; j < n; j++) {
+        if (!IntegerVector::is_na(cluster_XX[j]) && !NumericVector::is_na(U_masked[j])) {
+          cluster_sums[cluster_XX[j]] += U_masked[j];
+        }
+      }
+
+      // Step 3: Compute sum of squared cluster sums
+      std::set<int> counted_clusters;
+      for (int j = 0; j < n; j++) {
+        if (first_obs_by_clust[j] == 1 && !IntegerVector::is_na(cluster_XX[j])) {
+          int clust = cluster_XX[j];
+          if (counted_clusters.find(clust) == counted_clusters.end()) {
+            double cs = cluster_sums[clust];
+            sum_sq += cs * cs;
+            counted_clusters.insert(clust);
+          }
+        }
+      }
+
+      // Update U_Gg_var_glob with cluster sums
+      for (int j = 0; j < n; j++) {
+        if (!IntegerVector::is_na(cluster_XX[j])) {
+          U_Gg_var_glob(j, i) = cluster_sums[cluster_XX[j]];
+        }
+      }
+    }
+
+    double variance = sum_sq / (G_XX * G_XX);
+    SE_estimates[i] = std::sqrt(variance);
+  }
+
+  return List::create(
+    Named("SE_estimates") = SE_estimates,
+    Named("U_Gg_var_glob") = U_Gg_var_glob
+  );
+}
+
+// [[Rcpp::export]]
+List compute_placebo_effects_and_variances_cpp(
+    NumericMatrix U_Gg_pl_plus,
+    NumericMatrix U_Gg_pl_minus,
+    NumericMatrix count_pl_plus,
+    NumericMatrix count_pl_minus,
+    NumericMatrix U_Gg_var_pl_in,
+    NumericMatrix U_Gg_var_pl_out,
+    NumericVector N1_pl_vec,
+    NumericVector N0_pl_vec,
+    IntegerVector first_obs_by_gp,
+    IntegerVector first_obs_by_clust,
+    IntegerVector cluster_XX,
+    double G_XX,
+    int l_placebo_XX,
+    bool clustered) {
+  // Compute all placebo effects and variances in one pass
+
+  int n = U_Gg_pl_plus.nrow();
+  NumericVector DID_pl_estimates(l_placebo_XX);
+  NumericVector SE_pl_estimates(l_placebo_XX);
+  NumericVector N_switchers_pl(l_placebo_XX);
+  NumericVector N_effects_pl(l_placebo_XX);
+  NumericMatrix U_Gg_var_glob_pl(n, l_placebo_XX);
+
+  for (int i = 0; i < l_placebo_XX; i++) {
+    double N1 = N1_pl_vec[i];
+    double N0 = N0_pl_vec[i];
+    double total_N = N1 + N0;
+    N_switchers_pl[i] = total_N;
+
+    if (total_N == 0) {
+      DID_pl_estimates[i] = NA_REAL;
+      SE_pl_estimates[i] = NA_REAL;
+      continue;
+    }
+
+    double w_plus = N1 / total_N;
+    double w_minus = N0 / total_N;
+
+    // Compute DID placebo estimate
+    double sum_U_Gg = 0.0;
+    double sum_count = 0.0;
+
+    for (int j = 0; j < n; j++) {
+      double u_plus = U_Gg_pl_plus(j, i);
+      double u_minus = U_Gg_pl_minus(j, i);
+      double u_global = 0.0;
+
+      if (!NumericVector::is_na(u_plus) && !NumericVector::is_na(u_minus)) {
+        u_global = w_plus * u_plus + w_minus * u_minus;
+      } else if (!NumericVector::is_na(u_plus)) {
+        u_global = w_plus * u_plus;
+      } else if (!NumericVector::is_na(u_minus)) {
+        u_global = w_minus * u_minus;
+      }
+
+      if (first_obs_by_gp[j] == 0) {
+        u_global = NA_REAL;
+      }
+
+      if (!NumericVector::is_na(u_global)) {
+        sum_U_Gg += u_global;
+      }
+
+      // Compute count
+      double c_plus = count_pl_plus(j, i);
+      double c_minus = count_pl_minus(j, i);
+      double c_global = NA_REAL;
+
+      if (!NumericVector::is_na(c_plus) && !NumericVector::is_na(c_minus)) {
+        c_global = std::max(c_plus, c_minus);
+      } else if (!NumericVector::is_na(c_plus)) {
+        c_global = c_plus;
+      } else if (!NumericVector::is_na(c_minus)) {
+        c_global = c_minus;
+      }
+
+      if (!NumericVector::is_na(c_global) && c_global > 0) {
+        sum_count += c_global;
+      }
+    }
+
+    DID_pl_estimates[i] = sum_U_Gg / G_XX;
+    N_effects_pl[i] = sum_count;
+
+    // Compute variance
+    for (int j = 0; j < n; j++) {
+      double v_in = U_Gg_var_pl_in(j, i);
+      double v_out = U_Gg_var_pl_out(j, i);
+
+      double v_glob = 0.0;
+      if (!NumericVector::is_na(v_in)) {
+        v_glob += w_plus * v_in;
+      }
+      if (!NumericVector::is_na(v_out)) {
+        v_glob += w_minus * v_out;
+      }
+      U_Gg_var_glob_pl(j, i) = v_glob;
+    }
+
+    double sum_sq = 0.0;
+
+    if (!clustered) {
+      for (int j = 0; j < n; j++) {
+        if (first_obs_by_gp[j] == 1) {
+          double val = U_Gg_var_glob_pl(j, i);
+          if (!NumericVector::is_na(val)) {
+            sum_sq += val * val;
+          }
+        }
+      }
+    } else {
+      std::vector<double> U_masked(n);
+      for (int j = 0; j < n; j++) {
+        U_masked[j] = U_Gg_var_glob_pl(j, i) * first_obs_by_gp[j];
+      }
+
+      std::map<int, double> cluster_sums;
+      for (int j = 0; j < n; j++) {
+        if (!IntegerVector::is_na(cluster_XX[j]) && !NumericVector::is_na(U_masked[j])) {
+          cluster_sums[cluster_XX[j]] += U_masked[j];
+        }
+      }
+
+      std::set<int> counted_clusters;
+      for (int j = 0; j < n; j++) {
+        if (first_obs_by_clust[j] == 1 && !IntegerVector::is_na(cluster_XX[j])) {
+          int clust = cluster_XX[j];
+          if (counted_clusters.find(clust) == counted_clusters.end()) {
+            double cs = cluster_sums[clust];
+            sum_sq += cs * cs;
+            counted_clusters.insert(clust);
+          }
+        }
+      }
+
+      for (int j = 0; j < n; j++) {
+        if (!IntegerVector::is_na(cluster_XX[j])) {
+          U_Gg_var_glob_pl(j, i) = cluster_sums[cluster_XX[j]];
+        }
+      }
+    }
+
+    double variance = sum_sq / (G_XX * G_XX);
+    SE_pl_estimates[i] = std::sqrt(variance);
+  }
+
+  return List::create(
+    Named("DID_pl_estimates") = DID_pl_estimates,
+    Named("SE_pl_estimates") = SE_pl_estimates,
+    Named("N_switchers_pl") = N_switchers_pl,
+    Named("N_effects_pl") = N_effects_pl,
+    Named("U_Gg_var_glob_pl") = U_Gg_var_glob_pl
+  );
+}
+
+// [[Rcpp::export]]
+NumericMatrix compute_vcov_full_cpp(NumericMatrix U_Gg_var_glob,
+                                     IntegerVector first_obs,
+                                     NumericVector se_vec,
+                                     bool normalized,
+                                     Nullable<NumericVector> delta_D_global_ = R_NilValue,
+                                     double G_XX = 1.0) {
+  // Compute full variance-covariance matrix efficiently
+  int l_XX = U_Gg_var_glob.ncol();
+  int n = U_Gg_var_glob.nrow();
+  NumericMatrix vcov(l_XX, l_XX);
+  double G_XX_sq = G_XX * G_XX;
+
+  NumericVector delta_D_global;
+  bool has_delta = delta_D_global_.isNotNull();
+  if (has_delta) {
+    delta_D_global = delta_D_global_.get();
+  }
+
+  // Fill diagonal with squared SEs
+  for (int i = 0; i < l_XX; i++) {
+    vcov(i, i) = se_vec[i] * se_vec[i];
+  }
+
+  // Compute off-diagonal covariances
+  for (int i = 0; i < l_XX - 1; i++) {
+    for (int k = i + 1; k < l_XX; k++) {
+      double sum_sq = 0.0;
+
+      for (int j = 0; j < n; j++) {
+        if (first_obs[j] == 1) {
+          double val_i = U_Gg_var_glob(j, i);
+          double val_k = U_Gg_var_glob(j, k);
+
+          if (normalized && has_delta) {
+            if (!NumericVector::is_na(delta_D_global[i]) && delta_D_global[i] != 0) {
+              val_i = val_i / delta_D_global[i];
+            }
+            if (!NumericVector::is_na(delta_D_global[k]) && delta_D_global[k] != 0) {
+              val_k = val_k / delta_D_global[k];
+            }
+          }
+
+          if (!NumericVector::is_na(val_i) && !NumericVector::is_na(val_k)) {
+            double combined = val_i + val_k;
+            sum_sq += combined * combined;
+          }
+        }
+      }
+
+      double var_sum = sum_sq / G_XX_sq;
+      double cov = (var_sum - vcov(i, i) - vcov(k, k)) / 2.0;
+      vcov(i, k) = cov;
+      vcov(k, i) = cov;
+    }
+  }
+
+  return vcov;
+}
+
+// [[Rcpp::export]]
+List compute_avg_effect_cpp(NumericVector U_Gg_plus,
+                             NumericVector U_Gg_minus,
+                             NumericVector U_Gg_var_plus,
+                             NumericVector U_Gg_var_minus,
+                             IntegerVector first_obs_by_gp,
+                             IntegerVector first_obs_by_clust,
+                             IntegerVector cluster_XX,
+                             double w_plus,
+                             double G_XX,
+                             bool clustered) {
+  // Compute average total effect and its variance
+  int n = U_Gg_plus.size();
+
+  // Compute U_Gg_global
+  NumericVector U_Gg_global(n);
+  double sum_U_Gg = 0.0;
+
+  for (int j = 0; j < n; j++) {
+    double u_g = w_plus * U_Gg_plus[j] + (1.0 - w_plus) * U_Gg_minus[j];
+    if (first_obs_by_gp[j] == 0) {
+      u_g = NA_REAL;
+    }
+    U_Gg_global[j] = u_g;
+
+    if (!NumericVector::is_na(u_g)) {
+      sum_U_Gg += u_g;
+    }
+  }
+
+  double delta_XX = sum_U_Gg / G_XX;
+
+  // Compute variance
+  NumericVector U_Gg_var_global(n);
+  for (int j = 0; j < n; j++) {
+    U_Gg_var_global[j] = w_plus * U_Gg_var_plus[j] + (1.0 - w_plus) * U_Gg_var_minus[j];
+  }
+
+  double sum_sq = 0.0;
+
+  if (!clustered) {
+    for (int j = 0; j < n; j++) {
+      if (first_obs_by_gp[j] == 1) {
+        double val = U_Gg_var_global[j];
+        if (!NumericVector::is_na(val)) {
+          sum_sq += val * val;
+        }
+      }
+    }
+  } else {
+    std::vector<double> U_masked(n);
+    for (int j = 0; j < n; j++) {
+      U_masked[j] = U_Gg_var_global[j] * first_obs_by_gp[j];
+    }
+
+    std::map<int, double> cluster_sums;
+    for (int j = 0; j < n; j++) {
+      if (!IntegerVector::is_na(cluster_XX[j]) && !NumericVector::is_na(U_masked[j])) {
+        cluster_sums[cluster_XX[j]] += U_masked[j];
+      }
+    }
+
+    std::set<int> counted;
+    for (int j = 0; j < n; j++) {
+      if (first_obs_by_clust[j] == 1 && !IntegerVector::is_na(cluster_XX[j])) {
+        int clust = cluster_XX[j];
+        if (counted.find(clust) == counted.end()) {
+          double cs = cluster_sums[clust];
+          sum_sq += cs * cs;
+          counted.insert(clust);
+        }
+      }
+    }
+  }
+
+  double variance = sum_sq / (G_XX * G_XX);
+  double se_XX = std::sqrt(variance);
+
+  return List::create(
+    Named("delta_XX") = delta_XX,
+    Named("se_XX") = se_XX,
+    Named("U_Gg_global") = U_Gg_global,
+    Named("U_Gg_var_global") = U_Gg_var_global
+  );
 }
 
 // [[Rcpp::export]]
