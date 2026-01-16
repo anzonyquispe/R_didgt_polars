@@ -1,0 +1,35 @@
+====================================================================== 
+COMPREHENSIVE BENCHMARK: DID Estimators Comparison
+====================================================================== 
+Date: 2026-01-16 10:35:41.946969 
+Packages: DIDmultiplegtDYN (CRAN), DIDmultiplegtDYNpolars, did (CS), didimputation, fixest (SA)
+
+Loading data...
+Original data rows: 1683 
+Unique states: 51 
+Year range: 1956 - 1988 
+Treatment groups (first_treat): 0, 1956, 1969, 1970, 1971, 1972, 1973, 1974, 1975, 1976, 1977, 1985 
+
+
+ ====================================================================== 
+SCENARIO 1: Original Data ( 1683  rows)
+====================================================================== 
+
+1. Running DIDmultiplegtDYN (CRAN)...
+   Time: 4.42 seconds 
+2. Running DIDmultiplegtDYNpolars...
+   Time: 3.19 seconds 
+3. Running did (Callaway-Sant'Anna)...
+   Time: 0.92 seconds 
+4. Running didimputation...
+   Time: 0.08 seconds 
+5. Running fixest (Sun-Abraham)...
+   Time: 0.36 seconds 
+
+ ====================================================================== 
+SCENARIO 2: Synthetic Data 100x
+====================================================================== 
+
+Synthetic data rows: 168300 
+
+1. Running DIDmultiplegtDYN (CRAN)...
