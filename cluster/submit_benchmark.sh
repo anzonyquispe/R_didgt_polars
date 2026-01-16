@@ -33,15 +33,18 @@ export POLARS_MAX_THREADS=$SLURM_CPUS_PER_TASK
 echo "R_LIBS_USER: $R_LIBS_USER"
 echo "POLARS_MAX_THREADS: $POLARS_MAX_THREADS"
 
-# Change to the project directory
-cd $HOME/R_didgt_polars/tests
+# Set project root
+export PROJECT_ROOT=$HOME/R_didgt_polars
+
+# Change to the cluster directory
+cd $PROJECT_ROOT/cluster
 
 # Run the benchmark
 echo ""
 echo "Starting benchmark..."
 echo "=========================================="
 
-Rscript benchmark_wolfers_complete.R
+Rscript benchmark_wolfers_cluster.R
 
 echo ""
 echo "=========================================="
