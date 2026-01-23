@@ -1039,7 +1039,7 @@ did_multiplegt_dyn_core <- function(
         df <- compute_placebo_effects_polars(
           df, i, increase_XX, G_XX, t_min_XX, T_max_XX,
           trends_nonparam, cluster, controls, levels_d_sq_XX,
-          same_switchers_pl, normalized, continuous
+          same_switchers_pl, normalized, continuous, controls_globals
         )
 
         if (normalized == TRUE) {
@@ -1374,7 +1374,7 @@ compute_DOF_gt_polars <- function(df, i, type_sect = "effect") {
 compute_placebo_effects_polars <- function(
     df, i, increase_XX, G_XX, t_min_XX, T_max_XX,
     trends_nonparam, cluster, controls, levels_d_sq_XX,
-    same_switchers_pl, normalized, continuous
+    same_switchers_pl, normalized, continuous, controls_globals = NULL
 ) {
 
   # Drop existing placebo columns
@@ -1399,6 +1399,45 @@ compute_placebo_effects_polars <- function(
     (pl$col("outcome_XX")$shift(2 * i)$over("group_XX") -
      pl$col("outcome_XX")$shift(i)$over("group_XX"))$alias(diff_y_pl_col)
   )
+
+  # Residualize placebo outcome differences when controls are specified
+  # This matches the CRAN package logic at lines 1165-1200 in did_multiplegt_dyn_core.R
+  if (!is.null(controls) && length(controls) > 0 && !is.null(controls_globals)) {
+    count_controls <- 0L
+    for (var in controls) {
+      count_controls <- count_controls + 1L
+      diff_X_pl_col <- paste0("diff_X", count_controls, "_placebo_", i, "_XX")
+
+      # Compute long difference of control: shift(control, 2*i) - shift(control, i)
+      df <- df$with_columns(
+        (pl$col(var)$shift(2 * i)$over("group_XX") -
+         pl$col(var)$shift(i)$over("group_XX"))$alias(diff_X_pl_col)
+      )
+
+      # Residualize diff_y_pl for each baseline treatment level where useful_res > 1
+      for (l in levels_d_sq_XX) {
+        l_num <- as.numeric(l)
+        useful_res_name <- paste0("useful_res_", l, "_XX")
+        coefs_name <- paste0("coefs_sq_", l, "_XX")
+
+        if (useful_res_name %in% names(controls_globals) &&
+            controls_globals[[useful_res_name]] > 1 &&
+            coefs_name %in% names(controls_globals)) {
+
+          coef_val <- controls_globals[[coefs_name]][count_controls, 1]
+
+          # Subtract control effect from placebo outcome difference for this level
+          # diff_y_pl = diff_y_pl - coef * diff_X_placebo (only where d_sq_int_XX == l)
+          df <- df$with_columns(
+            pl$when(pl$col("d_sq_int_XX") == l_num)$
+              then(pl$col(diff_y_pl_col) - coef_val * pl$col(diff_X_pl_col))$
+              otherwise(pl$col(diff_y_pl_col))$
+              alias(diff_y_pl_col)
+          )
+        }
+      }
+    }
+  }
 
   # Identifying controls for placebos
   never_col <- paste0("never_change_d_", i, "_XX")

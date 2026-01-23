@@ -32,6 +32,7 @@
 #' @param continuous continuous
 #' @param data_only data_only
 #' @import polars
+#' @import data.table
 #' @importFrom dplyr lag
 #' @importFrom matlib Ginv
 #' @importFrom utils write.csv
@@ -401,7 +402,7 @@ suppressWarnings({
   by_cols_var <- c("d_sq_XX", trends_nonparam)
   by_cols_var <- by_cols_var[by_cols_var != "" & !is.na(by_cols_var) & nchar(by_cols_var) > 0]
   df <- df$with_columns(
-    pl$col("F_g_XX")$std()$over(by_cols_var)$alias("var_F_g_XX")
+    pl_over_cols(pl$col("F_g_XX")$std(), by_cols_var)$alias("var_F_g_XX")
   )
   df <- df$filter(pl$col("var_F_g_XX") > 0)
   df <- df$drop("var_F_g_XX")
@@ -599,7 +600,7 @@ suppressWarnings({
   by_cols_tg <- c("d_sq_XX", trends_nonparam)
   by_cols_tg <- by_cols_tg[by_cols_tg != "" & !is.na(by_cols_tg) & nchar(by_cols_tg) > 0]
   df <- df$with_columns(
-    pl$col("F_g_trunc_XX")$max()$over(by_cols_tg)$alias("T_g_XX")
+    pl_over_cols(pl$col("F_g_trunc_XX")$max(), by_cols_tg)$alias("T_g_XX")
   )
   df <- df$with_columns((pl$col("T_g_XX") - 1)$alias("T_g_XX"))
 
@@ -1006,6 +1007,9 @@ suppressWarnings({
     ## 3. FE regression using feols (optimized C code) - need data.frame for feols
     df <- df$with_columns(pl$col("time_XX")$cast(pl$Int32)$alias("time_FE_XX"))
 
+    # Add row_id for reliable joining (like CRAN implementation)
+    df <- df$with_row_index("row_id_XX")
+
     ## 4. Loop over baseline-treatment levels - use feols (optimized C code)
     for (l in levels_d_sq_XX_final) {
       outcol <- sprintf("E_y_hat_gt_int_%d_XX", l)
@@ -1031,16 +1035,20 @@ suppressWarnings({
       model <- feols(form, data = data_reg, weights = data_reg$weight_XX)
       data_reg$y_hat <- predict(model, newdata = data_reg)
 
-      # Create lookup table and join back
-      lookup_pl <- as_polars_df(data_reg[, c("group_XX", "time_XX", "y_hat")])
-      lookup_pl <- lookup_pl$rename(y_hat = outcol)
+      # Create lookup table with row_id for reliable joining
+      # Cast row_id_XX back to UInt32 to match original type (R converts to Float64)
+      lookup_pl <- as_polars_df(data_reg[, c("row_id_XX", "y_hat")])
+      lookup_pl <- lookup_pl$select(
+        pl$col("row_id_XX")$cast(pl$UInt32),
+        pl$col("y_hat")$alias(outcol)
+      )
 
-      # Join back to main df
-      df <- df$join(lookup_pl, on = c("group_XX", "time_XX"), how = "left")
+      # Join back to main df using row_id
+      df <- df$join(lookup_pl, on = "row_id_XX", how = "left")
     }
 
-    ## Clean up
-    df <- df$drop("time_FE_XX")
+    ## Clean up temporary columns
+    df <- df$drop(c("time_FE_XX", "row_id_XX"))
   }
 
 

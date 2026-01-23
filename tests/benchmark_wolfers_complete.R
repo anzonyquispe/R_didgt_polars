@@ -13,12 +13,12 @@ library(dplyr)
 
 # Set timeout (1 hour in seconds)
 TIMEOUT_SECONDS <- 3600
-
+setwd('/groups/sgulzar/sa_fires/proj_alterantive/did_checks/R_didgt_polars')
 # Helper function for separator
 sep_line <- function() paste(rep("=", 70), collapse = "")
 
 # Output file for logging
-log_file <- "/Users/anzony.quisperojas/Documents/GitHub/R_didgt_polars/tests/benchmark_wolfers_complete.log"
+log_file <- "tests/benchmark_wolfers_complete.log"
 sink(log_file, split = TRUE)
 
 cat(sep_line(), "\n")
@@ -29,7 +29,7 @@ cat("Packages: DIDmultiplegtDYN (CRAN), DIDmultiplegtDYNpolars, did (CS), didimp
 
 # Load original data
 cat("Loading data...\n")
-wolfers <- as.data.frame(read_dta("/Users/anzony.quisperojas/Documents/GitHub/R_didgt_polars/data/wolfers2006_didtextbook.dta"))
+wolfers <- as.data.frame(read_dta("data/wolfers2006_didtextbook.dta"))
 cat("Original data rows:", nrow(wolfers), "\n")
 
 # Prepare data for different packages
@@ -369,13 +369,13 @@ rm(wolfers_100x)
 gc()
 
 # ============================================================
-# SCENARIO 3: Synthetic Data 1000x (1,683,000 rows)
+# SCENARIO 3: Synthetic Data 10000x (16,830,000 rows)
 # ============================================================
 cat("\n", sep_line(), "\n")
-cat("SCENARIO 3: Synthetic Data 1000x\n")
+cat("SCENARIO 3: Synthetic Data 10000x\n")
 cat(sep_line(), "\n\n")
 
-wolfers_1000x <- create_synthetic_data(wolfers, 1000)
+wolfers_1000x <- create_synthetic_data(wolfers, 10000)
 cat("Synthetic data rows:", nrow(wolfers_1000x), "\n\n")
 
 # 1. DIDmultiplegtDYNpolars (expected fastest)
@@ -534,10 +534,10 @@ names(pivot_results) <- gsub("time_seconds.", "", names(pivot_results))
 print(pivot_results)
 
 # Save results to CSV
-write.csv(results, "/Users/anzony.quisperojas/Documents/GitHub/R_didgt_polars/tests/benchmark_results_complete.csv", row.names = FALSE)
+write.csv(results, "tests/benchmark_results_complete.csv", row.names = FALSE)
 
 cat("\n\nBenchmark completed at:", as.character(Sys.time()), "\n")
 sink()
 
 cat("Log saved to:", log_file, "\n")
-cat("Results saved to: /Users/anzony.quisperojas/Documents/GitHub/R_didgt_polars/tests/benchmark_results_complete.csv\n")
+cat("Results saved to: tests/benchmark_results_complete.csv\n")
