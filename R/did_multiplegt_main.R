@@ -183,11 +183,15 @@ suppressWarnings({
   }
 
   ## Dropping groups with always missing treatment or outcomes
+  ## Note: Must check both is_not_null AND is_not_nan to match R's !is.na() behavior
   df <- df$with_columns(
     pl$col("treatment")$mean()$over("group")$alias("mean_D"),
     pl$col("outcome")$mean()$over("group")$alias("mean_Y")
   )
-  df <- df$filter(pl$col("mean_Y")$is_not_null() & pl$col("mean_D")$is_not_null())
+  df <- df$filter(
+    pl$col("mean_Y")$is_not_null() & pl$col("mean_Y")$is_not_nan() &
+    pl$col("mean_D")$is_not_null() & pl$col("mean_D")$is_not_nan()
+  )
   df <- df$drop(c("mean_Y", "mean_D"))
 
   #### Predict_het option for heterogeneous treatment effects analysis
@@ -401,6 +405,7 @@ suppressWarnings({
   #### Dropping values of baseline treatment such that there is no variance in F_g within
   by_cols_var <- c("d_sq_XX", trends_nonparam)
   by_cols_var <- by_cols_var[by_cols_var != "" & !is.na(by_cols_var) & nchar(by_cols_var) > 0]
+
   df <- df$with_columns(
     pl_over_cols(pl$col("F_g_XX")$std(), by_cols_var)$alias("var_F_g_XX")
   )
@@ -963,8 +968,16 @@ suppressWarnings({
             store_singular[as.character(l)] <- TRUE
           }
 
-          rmax <- pl_max(df, "F_g_XX")
-          rsum_df <- df$filter(
+          # Stata computes rsum on control sample only (after keep if ever_change_d_XX==0&...)
+          # Filter to control sample first, then apply time conditions
+          control_sample <- df$filter(
+            (pl$col("ever_change_d_XX") == 0) &
+            pl$col("diff_y_XX")$is_not_null() &
+            (pl$col("fd_X_all_non_missing_XX") == 1) &
+            (pl$col("d_sq_int_XX") == l)
+          )
+          rmax <- pl_max(control_sample, "F_g_XX")
+          rsum_df <- control_sample$filter(
             (pl$col("time_XX") >= 2) &
             (pl$col("time_XX") <= (rmax - 1)) &
             (pl$col("time_XX") < pl$col("F_g_XX")) &
@@ -1651,6 +1664,53 @@ suppressWarnings({
     return(val)
   }
 
+  # Helper to sum all values of a column (like CRAN's sum(col, na.rm=TRUE))
+  pl_sum_col <- function(df, col_name) {
+    if (!pl_has_col(df, col_name)) return(0)
+    result <- df$lazy()$select(pl$col(col_name)$sum())$collect()
+    val <- pl_scalar(result)
+    if (is.null(val) || length(val) == 0 || is.na(val)) return(0)
+    return(val)
+  }
+
+  # Helper for variance computation that handles clustering correctly
+  # CRAN approach for clustered variance:
+  #   1. Multiply var column by first_obs_by_gp_XX
+  #   2. Sum by cluster_XX
+  #   3. Square the cluster sums
+  #   4. Multiply by first_obs_by_clust_XX
+  #   5. Sum total
+  # For non-clustered: just square and sum with first_obs_by_gp_XX filter
+  pl_compute_variance_sum <- function(df, col_name, clustered) {
+    if (!pl_has_col(df, col_name)) return(0)
+
+    if (!clustered) {
+      # Non-clustered: just square and sum
+      result <- df$lazy()$filter(pl$col("first_obs_by_gp_XX") == 1)$select((pl$col(col_name)$pow(2))$sum())$collect()
+      val <- pl_scalar(result)
+      if (is.null(val) || length(val) == 0 || is.na(val)) return(0)
+      return(val)
+    } else {
+      # Clustered: use data.table for exact match with CRAN
+      # Convert to data.table for the variance computation
+      dt <- as.data.table(as.data.frame(df$select(c("cluster_XX", "first_obs_by_gp_XX", "first_obs_by_clust_XX", col_name))))
+
+      # Step 1: Multiply by first_obs_by_gp_XX
+      dt[, var_weighted := get(col_name) * first_obs_by_gp_XX]
+
+      # Step 2: Sum by cluster_XX
+      dt[, clust_var_sum := sum(var_weighted, na.rm = TRUE), by = cluster_XX]
+
+      # Step 3 & 4: Square and multiply by first_obs_by_clust_XX
+      dt[, clust_var_sq := clust_var_sum^2 * first_obs_by_clust_XX]
+
+      # Step 5: Sum total
+      var_sq_sum <- sum(dt$clust_var_sq, na.rm = TRUE)
+
+      return(var_sq_sum)
+    }
+  }
+
   # Creation of the matrix which stores all the estimators (DID_l, DID_pl, delta, etc.), their sd and the CIs
   mat_res_XX <- matrix(NA, nrow = l_XX + l_placebo_XX + 1, ncol = 9)
 
@@ -1661,11 +1721,8 @@ suppressWarnings({
   # Handle clustering for variance computation
   clustered <- !is.null(cluster)
   first_obs_col <- if (clustered) "first_obs_by_clust_XX" else "first_obs_by_gp_XX"
-  G_var <- if (clustered) {
-    pl_scalar(df$lazy()$select(pl$col("cluster_XX")$n_unique())$collect())
-  } else {
-    G_XX
-  }
+  # CRAN uses G_XX for both clustered and non-clustered variance computation
+  G_var <- G_XX
 
   # BATCHED APPROACH: Build all columns first, then aggregate once
   # Step 1: Build weight vectors
@@ -1674,6 +1731,14 @@ suppressWarnings({
   for (i in 1:l_XX) {
     N1_vec[i] <- get(paste0("N1_", i, "_XX_new"))
     N0_vec[i] <- get(paste0("N0_", i, "_XX_new"))
+  }
+
+  if (getOption("DID_DEBUG_VARIANCE", FALSE)) {
+    cat("\n=== DEBUG: Weights for variance ===\n")
+    cat("N1_vec:", N1_vec, "\n")
+    cat("N0_vec:", N0_vec, "\n")
+    cat("w_in (N1/(N1+N0)):", N1_vec / (N1_vec + N0_vec), "\n")
+    cat("w_out (N0/(N1+N0)):", N0_vec / (N1_vec + N0_vec), "\n")
   }
 
   # Step 2: Add all global columns in batched with_columns calls
@@ -1710,10 +1775,11 @@ suppressWarnings({
       col_exprs[[length(col_exprs) + 1]] <- pl$lit(0)$alias(paste0("U_Gg", i, "_global_XX"))
     }
 
-    # Global count column
+    # Global count column - CRAN takes MAX of plus and minus, handling NAs
+    # Logic: if both non-NA, take max; if one is NA, take the other
     count_plus_expr <- if (pl_has_col(df, col_count_plus)) pl$col(col_count_plus) else pl$lit(NA_real_)
     count_minus_expr <- if (pl_has_col(df, col_count_minus)) pl$col(col_count_minus) else pl$lit(NA_real_)
-    col_exprs[[length(col_exprs) + 1]] <- pl$coalesce(count_plus_expr, count_minus_expr)$alias(paste0("count", i, "_global_XX"))
+    col_exprs[[length(col_exprs) + 1]] <- pl$when(count_plus_expr$is_null())$then(count_minus_expr)$when(count_minus_expr$is_null())$then(count_plus_expr)$when(count_plus_expr > count_minus_expr)$then(count_plus_expr)$otherwise(count_minus_expr)$alias(paste0("count", i, "_global_XX"))
   }
 
   # Apply all column expressions at once
@@ -1735,10 +1801,13 @@ suppressWarnings({
     if (pl_has_col(df, col_minus)) {
       agg_exprs[[length(agg_exprs) + 1]] <- (pl$col(col_minus) * pl$col("first_obs_by_gp_XX"))$sum()$alias(paste0("sum_minus_", i))
     }
-    # Sum of squared variance (first_obs filtered for variance)
-    agg_exprs[[length(agg_exprs) + 1]] <- ((pl$col(col_var_glob)$pow(2)) * pl$col(first_obs_col))$sum()$alias(paste0("var_sq_sum_", i))
-    # Count non-null in global count
-    agg_exprs[[length(agg_exprs) + 1]] <- (pl$col(col_count_global)$is_not_null()$cast(pl$Int32) * pl$col("first_obs_by_gp_XX"))$sum()$alias(paste0("count_effects_", i))
+    # Sum of squared variance - NON-CLUSTERED case only
+    # For clustered case, we handle separately below
+    if (!clustered) {
+      agg_exprs[[length(agg_exprs) + 1]] <- ((pl$col(col_var_glob)$pow(2)) * pl$col("first_obs_by_gp_XX"))$sum()$alias(paste0("var_sq_sum_", i))
+    }
+    # Sum of count_global (N_effect) - CRAN sums all values, not just first_obs filtered
+    agg_exprs[[length(agg_exprs) + 1]] <- pl$col(col_count_global)$sum()$alias(paste0("count_effects_", i))
     # Count dw (non-null and > 0)
     agg_exprs[[length(agg_exprs) + 1]] <- ((pl$col(col_count_global)$is_not_null() & (pl$col(col_count_global) > 0))$cast(pl$Int32))$sum()$alias(paste0("count_dw_", i))
   }
@@ -1746,6 +1815,98 @@ suppressWarnings({
   # Execute all aggregations in one collect
   agg_result <- do.call(function(...) df$lazy()$select(...)$collect(), agg_exprs)
   agg_df <- as.data.frame(agg_result)
+
+  # Handle clustered variance computation separately
+  # CRAN approach:
+  #   1. Multiply U_Gg_var_glob_XX by first_obs_by_gp_XX
+  #   2. Sum by cluster_XX
+  #   3. Square the cluster sums
+  #   4. Multiply by first_obs_by_clust_XX
+  #   5. Sum total
+  if (clustered) {
+    # Use data.table for exact match with CRAN cluster variance computation
+    dt <- as.data.table(as.data.frame(df$select(c(
+      "cluster_XX", "first_obs_by_gp_XX", "first_obs_by_clust_XX",
+      paste0("U_Gg_var_glob_", 1:l_XX, "_XX")
+    ))))
+
+    # Debug: Check counts
+    if (getOption("DID_DEBUG_VARIANCE", FALSE)) {
+      cat("\n=== DEBUG: Clustered variance computation ===\n")
+      cat("Rows in dt:", nrow(dt), "\n")
+      cat("Sum of first_obs_by_gp_XX:", sum(dt$first_obs_by_gp_XX, na.rm = TRUE), "\n")
+      cat("Sum of first_obs_by_clust_XX:", sum(dt$first_obs_by_clust_XX, na.rm = TRUE), "\n")
+      cat("Unique clusters:", uniqueN(dt$cluster_XX), "\n")
+      cat("G_XX used:", G_XX, "\n")
+
+      # Check U_Gg_var_glob values directly
+      col1 <- "U_Gg_var_glob_1_XX"
+      if (col1 %in% names(dt)) {
+        cat("\nU_Gg_var_glob_1_XX stats:\n")
+        cat("  Min:", min(dt[[col1]], na.rm = TRUE), "\n")
+        cat("  Max:", max(dt[[col1]], na.rm = TRUE), "\n")
+        cat("  Mean:", mean(dt[[col1]], na.rm = TRUE), "\n")
+        cat("  SD:", sd(dt[[col1]], na.rm = TRUE), "\n")
+        cat("  Sum:", sum(dt[[col1]], na.rm = TRUE), "\n")
+        cat("  Sum of squares:", sum(dt[[col1]]^2, na.rm = TRUE), "\n")
+        cat("  Non-NA count:", sum(!is.na(dt[[col1]])), "\n")
+        cat("  Non-zero count:", sum(dt[[col1]] != 0, na.rm = TRUE), "\n")
+
+        # Check first_obs filtered values
+        first_obs_vals <- dt[[col1]] * dt$first_obs_by_gp_XX
+        cat("\nFirst_obs filtered U_Gg_var_glob_1_XX:\n")
+        cat("  Sum:", sum(first_obs_vals, na.rm = TRUE), "\n")
+        cat("  Sum of squares:", sum(first_obs_vals^2, na.rm = TRUE), "\n")
+        cat("  Non-zero count:", sum(first_obs_vals != 0, na.rm = TRUE), "\n")
+      }
+    }
+
+    for (i in 1:l_XX) {
+      col_var_glob <- paste0("U_Gg_var_glob_", i, "_XX")
+      clust_sum_col <- paste0("clust_U_Gg_var_glob_", i, "_XX")
+
+      # Step 1: Multiply by first_obs_by_gp_XX
+      dt[, var_weighted := get(col_var_glob) * first_obs_by_gp_XX]
+
+      # Step 2: Sum by cluster_XX
+      dt[, (clust_sum_col) := sum(var_weighted, na.rm = TRUE), by = cluster_XX]
+
+      # Step 3 & 4: Square and multiply by first_obs_by_clust_XX
+      dt[, clust_var_sq := get(clust_sum_col)^2 * first_obs_by_clust_XX]
+
+      # Step 5: Sum total
+      var_sq_sum <- sum(dt$clust_var_sq, na.rm = TRUE)
+
+      if (getOption("DID_DEBUG_VARIANCE", FALSE) && i == 1) {
+        cat("\nEffect", i, ":\n")
+        cat("  Non-zero var_weighted:", sum(dt$var_weighted != 0 & !is.na(dt$var_weighted)), "\n")
+        cat("  Sum of var_weighted:", sum(dt$var_weighted, na.rm = TRUE), "\n")
+        cat("  Non-zero clust_var_sq:", sum(dt$clust_var_sq != 0 & !is.na(dt$clust_var_sq)), "\n")
+        cat("  var_sq_sum:", var_sq_sum, "\n")
+        cat("  var_sq_sum / G_XX^2:", var_sq_sum / G_XX^2, "\n")
+        cat("  SE:", sqrt(var_sq_sum / G_XX^2), "\n")
+      }
+
+      agg_df[[paste0("var_sq_sum_", i)]] <- var_sq_sum
+
+      # CRAN replaces U_Gg_var_glob with cluster-summed values for later covariance computation
+      # We need to do the same: replace U_Gg_var_glob_i_XX with clust_U_Gg_var_glob_i_XX
+      dt[, (col_var_glob) := get(clust_sum_col)]
+
+      # Clean up temp columns
+      dt[, c("var_weighted", "clust_var_sq") := NULL]
+    }
+
+    # Update the polars df with the cluster-summed U_Gg_var_glob values
+    # This is needed for the covariance computation in section 6
+    for (i in 1:l_XX) {
+      col_var_glob <- paste0("U_Gg_var_glob_", i, "_XX")
+      clust_sum_col <- paste0("clust_U_Gg_var_glob_", i, "_XX")
+      # Create a polars series from the data.table column and update df
+      clust_vals <- dt[[clust_sum_col]]
+      df <- df$with_columns(pl$lit(clust_vals)$alias(col_var_glob))
+    }
+  }
 
   # Step 4: Process results for each effect
   for (i in 1:l_XX) {
@@ -1770,6 +1931,7 @@ suppressWarnings({
     if (is.na(count_global_dw)) count_global_dw <- 0
 
     # Compute DID estimate
+    # CRAN: DID = sum(U_Gg_global * first_obs) / G_XX
     if (total_N > 0) {
       DID_i <- (N1_i * sum_plus / G_XX + N0_i * sum_minus / G_XX) / total_N
     } else {
@@ -1895,7 +2057,7 @@ suppressWarnings({
       (pl$lit(w_plus_XX) * var_plus_expr + pl$lit(1 - w_plus_XX) * var_minus_expr)$alias("U_Gg_var_global_XX")
     )
 
-    var_sum_avg <- pl_sum_sq_first_obs(df, "U_Gg_var_global_XX", first_obs_col)
+    var_sum_avg <- pl_compute_variance_sum(df, "U_Gg_var_global_XX", clustered)
     se_XX <- sqrt(var_sum_avg) / G_var
 
     assign("Av_tot_effect", delta_XX)
@@ -1915,15 +2077,31 @@ suppressWarnings({
     mat_res_XX[l_XX + 1, 9] <- 0
     assign("N_switchers_effect_average", N_switchers_effect_XX)
 
-    # Build count_global using polars coalesce across all effect counts
-    count_exprs <- lapply(1:l_XX, function(i) pl$col(paste0("count", i, "_global_XX")))
+    # Build count_global using max across all effect counts (like CRAN's fifelse loop)
+    # CRAN takes max of count{i}_global_XX across all i, with NA treated as 0
+    count_exprs <- lapply(1:l_XX, function(i) pl$col(paste0("count", i, "_global_XX"))$fill_null(0))
     df <- df$with_columns(
-      do.call(pl$coalesce, count_exprs)$alias("count_global_XX")
+      do.call(pl$max_horizontal, count_exprs)$alias("count_global_XX")
     )
 
-    # Count observations
-    N_effect_XX <- pl_scalar(df$lazy()$filter(pl$col("first_obs_by_gp_XX") == 1)$select(pl$col("count_global_XX")$sum())$collect())
-    N_effect_dwXX <- pl_scalar(df$lazy()$filter(pl$col("first_obs_by_gp_XX") == 1 & pl$col("count_global_XX")$is_not_null() & (pl$col("count_global_XX") > 0))$select(pl$len())$collect())
+    # Count observations - CRAN sums all values without first_obs filter
+    N_effect_XX <- pl_sum_col(df, "count_global_XX")
+    # N_effect_dwXX: CRAN creates indicator (count > 0) and sums all rows, not just first_obs
+    # count_global_dwXX = as.numeric(!is.na(count_global_XX) & count_global_XX > 0)
+    # N_effect_dwXX = sum(count_global_dwXX)
+    N_effect_dwXX <- pl_scalar(df$lazy()$select(
+      ((pl$col("count_global_XX")$is_not_null()) & (pl$col("count_global_XX") > 0))$cast(pl$Int32)$sum()
+    )$collect())
+
+    if (getOption("DID_DEBUG_COUNT", FALSE)) {
+      cat("\n=== DEBUG: Average effect N computation ===\n")
+      cat("count_global_XX exists:", pl_has_col(df, "count_global_XX"), "\n")
+      if (pl_has_col(df, "count_global_XX")) {
+        cat("count_global_XX sample:\n")
+        print(head(as.data.frame(df$select(c("count_global_XX", "first_obs_by_gp_XX"))), 20))
+        cat("N_effect_XX:", N_effect_XX, "\n")
+      }
+    }
 
     if (is.null(N_effect_XX) || is.na(N_effect_XX)) N_effect_XX <- 0
     if (is.null(N_effect_dwXX) || is.na(N_effect_dwXX)) N_effect_dwXX <- 0
@@ -1972,8 +2150,20 @@ suppressWarnings({
           (pl$lit(w_in) * var_in_expr + pl$lit(w_out) * var_out_expr)$alias(paste0("U_Gg_var_glob_pl_", i, "_XX"))
         )
 
-        var_sum_pl <- pl_sum_sq_first_obs(df, paste0("U_Gg_var_glob_pl_", i, "_XX"), first_obs_col)
+        var_sum_pl <- pl_compute_variance_sum(df, paste0("U_Gg_var_glob_pl_", i, "_XX"), clustered)
         SE_pl_i <- sqrt(var_sum_pl) / G_var
+
+        # For clustered SE, update the df column with cluster-summed values for covariance computation
+        # This mirrors what CRAN does: replaces U_Gg_var_glob_pl_i_XX with clust_U_Gg_var_glob_pl_i_XX
+        if (clustered) {
+          pl_col_name <- paste0("U_Gg_var_glob_pl_", i, "_XX")
+          dt_pl <- as.data.table(as.data.frame(df$select(c("cluster_XX", "first_obs_by_gp_XX", pl_col_name))))
+          dt_pl[, var_weighted := get(pl_col_name) * first_obs_by_gp_XX]
+          dt_pl[, clust_var_sum := sum(var_weighted, na.rm = TRUE), by = cluster_XX]
+
+          # Update df with cluster-summed values
+          df <- df$with_columns(pl$lit(dt_pl$clust_var_sum)$alias(pl_col_name))
+        }
       } else {
         SE_pl_i <- NA
         df <- df$with_columns(pl$lit(0)$alias(paste0("U_Gg_var_glob_pl_", i, "_XX")))
@@ -1987,7 +2177,19 @@ suppressWarnings({
       df <- df$with_columns(
         pl$coalesce(count_plus_expr, count_minus_expr)$alias(paste0("count", i, "_pl_global_XX"))
       )
-      N_effects_pl_i <- pl_count_first_obs(df, paste0("count", i, "_pl_global_XX"))
+      # CRAN sums all values of count column for N, not just first_obs filtered
+      N_effects_pl_i <- pl_sum_col(df, paste0("count", i, "_pl_global_XX"))
+
+      if (getOption("DID_DEBUG_COUNT", FALSE) && i == 1) {
+        cat("\n=== DEBUG: Placebo 1 N computation ===\n")
+        pl_col <- paste0("count", i, "_pl_global_XX")
+        cat("Column", pl_col, "exists:", pl_has_col(df, pl_col), "\n")
+        if (pl_has_col(df, pl_col)) {
+          cat("Sample values:\n")
+          print(head(as.data.frame(df$select(c(pl_col, "first_obs_by_gp_XX"))), 20))
+          cat("N_effects_pl_i:", N_effects_pl_i, "\n")
+        }
+      }
 
       # Handle normalization
       if (normalized == TRUE && total_N_pl > 0) {
@@ -2030,11 +2232,12 @@ suppressWarnings({
       mat_res_XX[l_XX + 1 + i, 3] <- if (!is.na(DID_pl_i) && !is.na(SE_pl_i)) DID_pl_i - z_level * SE_pl_i else NA
       mat_res_XX[l_XX + 1 + i, 4] <- if (!is.na(DID_pl_i) && !is.na(SE_pl_i)) DID_pl_i + z_level * SE_pl_i else NA
 
-      # Count dw for placebo
-      count_dw_pl <- pl_scalar(df$lazy()$filter(
-        pl$col("first_obs_by_gp_XX") == 1 &
-        (pl$col(col_count_plus)$is_not_null() | pl$col(col_count_minus)$is_not_null())
-      )$select(pl$len())$collect())
+      # Count dw for placebo - CRAN counts all rows where count is non-null and > 0
+      # Not just first_obs groups, but ALL rows
+      pl_col_name <- paste0("count", i, "_pl_global_XX")
+      count_dw_pl <- pl_scalar(df$lazy()$select(
+        ((pl$col(pl_col_name)$is_not_null()) & (pl$col(pl_col_name) > 0))$cast(pl$Int32)$sum()
+      )$collect())
       if (is.null(count_dw_pl) || is.na(count_dw_pl)) count_dw_pl <- 0
 
       mat_res_XX[l_XX + 1 + i, 5] <- count_dw_pl

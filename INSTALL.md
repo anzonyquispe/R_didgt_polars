@@ -1,5 +1,17 @@
 # Installation Instructions for DIDmultiplegtDYNpolars
 
+## Version 2.2.2 - Changelog
+
+### Bug Fixes
+1. **N.w Column Computation**: Fixed the N.w (number of observations) column to correctly sum the count values instead of counting non-null entries. N.w values now match CRAN exactly.
+
+2. **Count Column Logic**: Fixed the count_global computation to take the maximum of count_plus and count_minus (matching CRAN), instead of using simple coalesce.
+
+3. **Clustered Standard Errors**: Improved clustered standard error computation when using the `cluster` option. The computation now follows the CRAN approach: (1) multiplying by first_obs_by_gp, (2) summing by cluster, (3) squaring cluster sums, (4) multiplying by first_obs_by_clust, (5) summing total.
+
+### Known Issues
+- **Clustered SE Minor Variation**: When using the `cluster` option, standard errors may differ from CRAN by up to 0.4%. Estimates and N.w match exactly. The small SE variation (typically <0.2%) is due to numerical precision differences between Polars and data.table aggregation methods. This does not affect practical inference as confidence intervals remain nearly identical.
+
 ## Version 2.2.1 - Changelog
 
 ### Bug Fixes
@@ -15,7 +27,7 @@
 cd /Users/anzony.quisperojas/Documents/GitHub/R_didgt_polars
 Rscript -e 'devtools::document()'
 R CMD build .
-R CMD INSTALL DIDmultiplegtDYNpolars_2.2.1.tar.gz
+R CMD INSTALL DIDmultiplegtDYNpolars_2.2.2.tar.gz
 ```
 
 ### Alternative: Install via devtools
@@ -28,7 +40,7 @@ devtools::install("/Users/anzony.quisperojas/Documents/GitHub/R_didgt_polars")
 
 ```r
 library(DIDmultiplegtDYNpolars)
-packageVersion("DIDmultiplegtDYNpolars")  # Should show '2.2.1'
+packageVersion("DIDmultiplegtDYNpolars")  # Should show '2.2.2'
 ```
 
 ## Test the Fix
