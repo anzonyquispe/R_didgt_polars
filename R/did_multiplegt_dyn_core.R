@@ -508,11 +508,15 @@ did_multiplegt_dyn_core <- function(
             m_g_col <- paste0("m", increase_XX, "_g_", l, "_", count_controls, "_", i, "_XX")
             N_inc_val <- get(paste0("N", increase_XX, "_", i, "_XX"))
 
+            # Safe division to avoid 0/0 = NaN
+            safe_ratio_m <- pl$when(pl$col(N_gt_ctrl_col) == 0)$
+              then(pl$lit(0))$
+              otherwise(pl$col(N_t_g_col) / pl$col(N_gt_ctrl_col))
             df <- df$with_columns(
               (
                 ((pl$lit(i) <= pl$col("T_g_XX") - 2) & (pl$col("d_sq_int_XX") == l_num))$cast(pl$Float64) *
                 (G_XX / N_inc_val) *
-                (pl$col(dist_col) - (pl$col(N_t_g_col) / pl$col(N_gt_ctrl_col)) * pl$col(never_col)) *
+                (pl$col(dist_col) - safe_ratio_m * pl$col(never_col)) *
                 ((pl$col("time_XX") >= i + 1) & (pl$col("time_XX") <= pl$col("T_g_XX")))$cast(pl$Float64) *
                 pl$col(diff_X_N_col)
               )$alias(m_g_col)
@@ -535,9 +539,13 @@ did_multiplegt_dyn_core <- function(
             M_val <- pl_scalar_sum(df, m_col) / G_XX
             df <- df$with_columns(pl$lit(M_val)$alias(M_col))
 
-            # E_hat_denom
+            # E_hat_denom - only count rows where diff_y_XX is not missing (matches Stata)
             df <- df$with_columns(
-              pl$when((pl$col("F_g_XX") > pl$col("time_XX")) & (pl$col("d_sq_int_XX") == l_num))$
+              pl$when(
+                (pl$col("F_g_XX") > pl$col("time_XX")) &
+                (pl$col("d_sq_int_XX") == l_num) &
+                pl$col("diff_y_XX")$is_not_null()
+              )$
                 then(pl$lit(1.0))$
                 otherwise(pl$lit(0.0))$
                 alias("dummy_XX")
@@ -581,12 +589,22 @@ did_multiplegt_dyn_core <- function(
             prod_X_col <- paste0("prod_X", count_controls, "_Ngt_XX")
             in_sum_temp_col <- paste0("in_sum_temp_", count_controls, "_", l, "_XX")
 
+            # DOF adjustment for in_sum_temp - avoid NaN by only computing sqrt when E_hat_denom > 1
+            # Stata: in_sum_temp_adj = 0 when E_hat_denom <= 1, else sqrt(E_hat_denom/(E_hat_denom-1))-1
+            in_sum_adj_col <- paste0("in_sum_temp_adj_", count_controls, "_", l, "_XX")
+            df <- df$with_columns(
+              pl$when(pl$col(E_hat_denom_col) > 1)$
+                then((pl$col(E_hat_denom_col) / (pl$col(E_hat_denom_col) - 1))$sqrt() - 1)$
+                otherwise(pl$lit(0.0))$
+                alias(in_sum_adj_col)
+            )
+
             df <- df$with_columns(
               (
                 pl$col(prod_X_col) *
                 (pl$lit(1.0) +
                   (pl$col(E_hat_denom_col) >= 2)$cast(pl$Float64) *
-                  ((pl$col(E_hat_denom_col) / (pl$col(E_hat_denom_col) - 1))$sqrt() - 1)
+                  pl$col(in_sum_adj_col)
                 ) *
                 (pl$col("diff_y_XX") - pl$col(E_y_hat_col)) *
                 ((pl$col("time_XX") >= 2) & (pl$col("time_XX") <= pl$col("F_g_XX") - 1))$cast(pl$Float64) /
@@ -664,7 +682,7 @@ did_multiplegt_dyn_core <- function(
 
       # DOF counting
       if (is.null(cluster) || cluster == "" || is.na(cluster)) {
-        df <- pl_filtered_agg_over(df, dof_ns_col, pl$col(dof_ns_col) == 1, ns_by_cols, dof_coh_ns_col, "sum")
+        df <- pl_filtered_agg_over(df, dof_ns_col, pl$col(dof_ns_col) == 1, ns_by_cols, dof_coh_ns_col, "sum", filter_result = TRUE)
       } else {
         cluster_dof_col <- paste0("cluster_dof_", i, "_ns_XX")
         df <- df$with_columns(
@@ -699,7 +717,7 @@ did_multiplegt_dyn_core <- function(
         df <- df$with_columns((pl$col(total_s_col) / pl$col(count_s_col))$alias(mean_s_col))
 
         if (is.null(cluster) || cluster == "" || is.na(cluster)) {
-          df <- pl_filtered_agg_over(df, dof_s_col, pl$col(dof_s_col) == 1, sw_by_cols, dof_coh_s_col, "sum")
+          df <- pl_filtered_agg_over(df, dof_s_col, pl$col(dof_s_col) == 1, sw_by_cols, dof_coh_s_col, "sum", filter_result = TRUE)
         } else {
           cluster_dof_s_col <- paste0("cluster_dof_", i, "_s_XX")
           df <- df$with_columns(
@@ -832,7 +850,7 @@ did_multiplegt_dyn_core <- function(
       df <- df$with_columns((pl$col(total_ns_s_col) / pl$col(count_ns_s_col))$alias(mean_ns_s_col))
 
       if (is.null(cluster) || cluster == "" || is.na(cluster)) {
-        df <- pl_filtered_agg_over(df, dof_ns_s_col, pl$col(dof_ns_s_col) == 1, ns_by_cols, dof_coh_ns_s_col, "sum")
+        df <- pl_filtered_agg_over(df, dof_ns_s_col, pl$col(dof_ns_s_col) == 1, ns_by_cols, dof_coh_ns_s_col, "sum", filter_result = TRUE)
       } else {
         cluster_dof_ns_s_col <- paste0("cluster_dof_", i, "_ns_s_XX")
         df <- df$with_columns(
@@ -858,13 +876,17 @@ did_multiplegt_dyn_core <- function(
         )
 
         # U_Gg_temp
+        # Note: Use safe division to avoid 0/0 = NaN when N_gt_ctrl is 0
         U_Gg_temp_col <- paste0("U_Gg", i, "_temp_XX")
+        safe_ratio <- pl$when(pl$col(N_gt_ctrl_col) == 0)$
+          then(pl$lit(0))$
+          otherwise(pl$col(N_t_g_col) / pl$col(N_gt_ctrl_col))
         df <- df$with_columns(
           (
             pl$col(dummy_U_col) * (G_XX / N_inc_val) *
             ((pl$col("time_XX") >= i + 1) & (pl$col("time_XX") <= pl$col("T_g_XX")))$cast(pl$Float64) *
             pl$col("N_gt_XX") *
-            (pl$col(dist_col) - (pl$col(N_t_g_col) / pl$col(N_gt_ctrl_col)) * pl$col(never_col)) *
+            (pl$col(dist_col) - safe_ratio * pl$col(never_col)) *
             pl$col(diff_y_col)
           )$alias(U_Gg_temp_col)
         )
@@ -891,10 +913,11 @@ did_multiplegt_dyn_core <- function(
         E_hat_col <- paste0("E_hat_gt_", i, "_XX")
         DOF_col <- paste0("DOF_gt_", i, "_XX")
 
+        # Re-use safe_ratio from U_Gg_temp computation
         df <- df$with_columns(
           (
             pl$col(dummy_U_col) * (G_XX / N_inc_val) *
-            (pl$col(dist_col) - (pl$col(N_t_g_col) / pl$col(N_gt_ctrl_col)) * pl$col(never_col)) *
+            (pl$col(dist_col) - safe_ratio * pl$col(never_col)) *
             ((pl$col("time_XX") >= i + 1) & (pl$col("time_XX") <= pl$col("T_g_XX")))$cast(pl$Float64) *
             pl$col("N_gt_XX") * pl$col(DOF_col) *
             (pl$col(diff_y_col) - pl$col(E_hat_col))
@@ -904,6 +927,10 @@ did_multiplegt_dyn_core <- function(
         # Controls adjustment for variance
         if (!is.null(controls)) {
           for (l in levels_d_sq_XX) {
+            # Only include cohort in variance adjustment if useful_res > 1 (matches Stata)
+            useful_res_val <- get(paste0("useful_res_", l, "_XX"))
+            if (is.null(useful_res_val) || useful_res_val <= 1) next
+
             l_num <- as.numeric(l)
             comb_col <- paste0("combined", increase_XX, "_temp_", l, "_", i, "_XX")
             df <- df$with_columns(pl$lit(0.0)$alias(comb_col))
@@ -1042,7 +1069,7 @@ did_multiplegt_dyn_core <- function(
         df <- compute_placebo_effects_polars(
           df, i, increase_XX, G_XX, t_min_XX, T_max_XX,
           trends_nonparam, cluster, controls, levels_d_sq_XX,
-          same_switchers_pl, normalized, continuous
+          same_switchers_pl, normalized, continuous, controls_globals
         )
 
         if (normalized == TRUE) {
@@ -1247,22 +1274,17 @@ compute_E_hat_gt_polars <- function(df, i, type_sect = "effect") {
     pl$when(cond_A)$then(pl$lit(0.0))$otherwise(pl$col(E_hat))$alias(E_hat)
   )
 
-  # Condition B: time < Fg AND (dof_ns is null OR dof_ns >= 2)
+  # Condition B: time < Fg AND dof_ns >= 2 (Stata: dof_cohort_ns_t >= 2)
+  # Note: In Stata, if dof_ns is missing, the condition is FALSE, so E_hat stays at 0
   cond_B <- (pl$col("time_XX") < pl$col("F_g_XX")) &
-            (pl$col(dof_ns)$is_null() | (pl$col(dof_ns) >= 2))
+            pl$col(dof_ns)$is_not_null() & (pl$col(dof_ns) >= 2)
   df <- df$with_columns(
     pl$when(cond_B)$then(pl$col(mean_ns))$otherwise(pl$col(E_hat))$alias(E_hat)
   )
 
-  # Set to NA if mean_ns is NA/NaN
-  df <- df$with_columns(
-    pl$when(pl$col(mean_ns)$is_null() | pl$col(mean_ns)$is_nan())$
-      then(pl$lit(NA_real_))$otherwise(pl$col(E_hat))$alias(E_hat)
-  )
-
-  # Condition C: (Fg - 1 + i == time) AND (dof_s is null OR dof_s >= 2)
+  # Condition C: (Fg - 1 + i == time) AND dof_s >= 2 (Stata: dof_cohort_s_t >= 2)
   cond_C <- (pl$col("F_g_XX") - 1 + i == pl$col("time_XX")) &
-            (pl$col(dof_s)$is_null() | (pl$col(dof_s) >= 2))
+            pl$col(dof_s)$is_not_null() & (pl$col(dof_s) >= 2)
   df <- df$with_columns(
     pl$when(cond_C)$then(pl$col(mean_s))$otherwise(pl$col(E_hat))$alias(E_hat)
   )
@@ -1277,12 +1299,6 @@ compute_E_hat_gt_polars <- function(df, i, type_sect = "effect") {
             )
   df <- df$with_columns(
     pl$when(cond_D)$then(pl$col(mean_nss))$otherwise(pl$col(E_hat))$alias(E_hat)
-  )
-
-  # Set to NA if mean_nss is NA/NaN
-  df <- df$with_columns(
-    pl$when(pl$col(mean_nss)$is_null() | pl$col(mean_nss)$is_nan())$
-      then(pl$lit(NA_real_))$otherwise(pl$col(E_hat))$alias(E_hat)
   )
 
   return(df)
@@ -1348,13 +1364,6 @@ compute_DOF_gt_polars <- function(df, i, type_sect = "effect") {
       alias(DOF_col)
   )
 
-  # Set to NA where all DOF columns are NA
-  df <- df$with_columns(
-    pl$when(
-      pl$col(dof_s_t)$is_null() & pl$col(dof_ns_t)$is_null() & pl$col(dof_ns_s_t)$is_null()
-    )$then(pl$lit(NA_real_))$otherwise(pl$col(DOF_col))$alias(DOF_col)
-  )
-
   return(df)
 }
 
@@ -1377,7 +1386,7 @@ compute_DOF_gt_polars <- function(df, i, type_sect = "effect") {
 compute_placebo_effects_polars <- function(
     df, i, increase_XX, G_XX, t_min_XX, T_max_XX,
     trends_nonparam, cluster, controls, levels_d_sq_XX,
-    same_switchers_pl, normalized, continuous
+    same_switchers_pl, normalized, continuous, controls_globals = NULL
 ) {
 
   # Drop existing placebo columns
@@ -1402,6 +1411,51 @@ compute_placebo_effects_polars <- function(
     (pl$col("outcome_XX")$shift(2 * i)$over("group_XX") -
      pl$col("outcome_XX")$shift(i)$over("group_XX"))$alias(diff_y_pl_col)
   )
+
+  # Residualize placebo outcome differences when controls are specified
+  # This matches the CRAN package logic at lines 1165-1200 in did_multiplegt_dyn_core.R
+  if (!is.null(controls) && length(controls) > 0 && !is.null(controls_globals)) {
+    count_controls <- 0L
+    for (var in controls) {
+      count_controls <- count_controls + 1L
+      diff_X_pl_col <- paste0("diff_X", count_controls, "_placebo_", i, "_XX")
+
+      # Compute long difference of control: shift(control, 2*i) - shift(control, i)
+      df <- df$with_columns(
+        (pl$col(var)$shift(2 * i)$over("group_XX") -
+         pl$col(var)$shift(i)$over("group_XX"))$alias(diff_X_pl_col)
+      )
+
+      # Compute diff_X_pl_N = N_gt * diff_X_placebo
+      diff_X_pl_N_col <- paste0("diff_X", count_controls, "_pl_", i, "_N_XX")
+      df <- df$with_columns(
+        (pl$col("N_gt_XX") * pl$col(diff_X_pl_col))$alias(diff_X_pl_N_col)
+      )
+
+      # Residualize diff_y_pl for each baseline treatment level where useful_res > 1
+      for (l in levels_d_sq_XX) {
+        l_num <- as.numeric(l)
+        useful_res_name <- paste0("useful_res_", l, "_XX")
+        coefs_name <- paste0("coefs_sq_", l, "_XX")
+
+        if (useful_res_name %in% names(controls_globals) &&
+            controls_globals[[useful_res_name]] > 1 &&
+            coefs_name %in% names(controls_globals)) {
+
+          coef_val <- controls_globals[[coefs_name]][count_controls, 1]
+
+          # Subtract control effect from placebo outcome difference for this level
+          # diff_y_pl = diff_y_pl - coef * diff_X_placebo (only where d_sq_int_XX == l)
+          df <- df$with_columns(
+            pl$when(pl$col("d_sq_int_XX") == l_num)$
+              then(pl$col(diff_y_pl_col) - coef_val * pl$col(diff_X_pl_col))$
+              otherwise(pl$col(diff_y_pl_col))$
+              alias(diff_y_pl_col)
+          )
+        }
+      }
+    }
+  }
 
   # Identifying controls for placebos
   never_col <- paste0("never_change_d_", i, "_XX")
@@ -1468,6 +1522,70 @@ compute_placebo_effects_polars <- function(
   N_t_pl_g_col <- paste0("N", increase_XX, "_t_placebo_", i, "_g_XX")
   df <- pl_sum_over(df, dist_pl_w_col, by_cols, N_t_pl_g_col)
 
+  # Compute M_pl terms for controls adjustment (after N_placebo is computed)
+  if (!is.null(controls) && length(controls) > 0 && !is.null(controls_globals)) {
+    # Initialize part2_pl_switch column
+    part2_pl_col <- paste0("part2_pl_switch", increase_XX, "_", i, "_XX")
+    df <- df$with_columns(pl$lit(0.0)$alias(part2_pl_col))
+
+    count_controls <- length(controls)
+    control_idx <- 0L
+    for (var in controls) {
+      control_idx <- control_idx + 1L
+      diff_X_pl_N_col <- paste0("diff_X", control_idx, "_pl_", i, "_N_XX")
+
+      for (l in levels_d_sq_XX) {
+        l_num <- as.numeric(l)
+        useful_res_name <- paste0("useful_res_", l, "_XX")
+
+        # m_pl_g column
+        m_pl_g_col <- paste0("m", increase_XX, "_pl_g_", l, "_", control_idx, "_", i, "_XX")
+
+        if (N_pl_val > 0) {
+          # Safe division to avoid 0/0 = NaN
+          safe_ratio_m_pl <- pl$when(pl$col(N_gt_ctrl_pl_col) == 0)$
+            then(pl$lit(0))$
+            otherwise(pl$col(N_t_pl_g_col) / pl$col(N_gt_ctrl_pl_col))
+          df <- df$with_columns(
+            (
+              ((pl$lit(i) <= pl$col("T_g_XX") - 2) & (pl$col("d_sq_int_XX") == l_num))$cast(pl$Float64) *
+              (G_XX / N_pl_val) *
+              (pl$col(dist_pl_col) - safe_ratio_m_pl * pl$col(never_pl_col)) *
+              ((pl$col("time_XX") >= i + 1) & (pl$col("time_XX") <= pl$col("T_g_XX")))$cast(pl$Float64) *
+              pl$col(diff_X_pl_N_col)
+            )$alias(m_pl_g_col)
+          )
+        } else {
+          df <- df$with_columns(pl$lit(0.0)$alias(m_pl_g_col))
+        }
+
+        # Sum by group
+        m_pl_col <- paste0("m_pl", increase_XX, "_", l, "_", control_idx, "_", i, "_XX")
+        df <- pl_sum_over(df, m_pl_g_col, "group_XX", m_pl_col)
+
+        # Set NA where not first_obs
+        df <- df$with_columns(
+          pl$when(pl$col("first_obs_by_gp_XX") == 1)$
+            then(pl$col(m_pl_col))$
+            otherwise(pl$lit(NA_real_))$
+            alias(m_pl_col)
+        )
+
+        # M_pl (scalar mean)
+        M_pl_col <- paste0("M_pl", increase_XX, "_", l, "_", control_idx, "_", i, "_XX")
+        M_pl_val <- pl_scalar_sum(df, m_pl_col) / G_XX
+        df <- df$with_columns(pl$lit(M_pl_val)$alias(M_pl_col))
+
+        # Initialize in_brackets_pl for later use
+        if (useful_res_name %in% names(controls_globals) &&
+            controls_globals[[useful_res_name]] > 1) {
+          in_brackets_pl_col <- paste0("in_brackets_pl_", l, "_", control_idx, "_XX")
+          df <- df$with_columns(pl$lit(0.0)$alias(in_brackets_pl_col))
+        }
+      }
+    }
+  }
+
   # DOF computations for placebos
   diff_y_pl_N_col <- paste0("diff_y_pl_", i, "_N_gt_XX")
   dof_ns_pl <- paste0("dof_ns_pl_", i, "_XX")
@@ -1510,7 +1628,7 @@ compute_placebo_effects_polars <- function(
   df <- df$with_columns((pl$col(total_ns_col) / pl$col(count_ns_col))$alias(mean_ns_col))
 
   if (is.null(cluster) || cluster == "" || is.na(cluster)) {
-    df <- pl_filtered_agg_over(df, dof_ns_pl, pl$col(dof_ns_pl) == 1, ns_by_cols, dof_coh_ns_col, "sum")
+    df <- pl_filtered_agg_over(df, dof_ns_pl, pl$col(dof_ns_pl) == 1, ns_by_cols, dof_coh_ns_col, "sum", filter_result = TRUE)
   } else {
     cluster_dof_ns_pl <- paste0("cluster_dof_pl_", i, "_ns_XX")
     df <- df$with_columns(
@@ -1535,7 +1653,7 @@ compute_placebo_effects_polars <- function(
   df <- df$with_columns((pl$col(total_s_col) / pl$col(count_s_col))$alias(mean_s_col))
 
   if (is.null(cluster) || cluster == "" || is.na(cluster)) {
-    df <- pl_filtered_agg_over(df, dof_s_pl, pl$col(dof_s_pl) == 1, sw_by_cols, dof_coh_s_col, "sum")
+    df <- pl_filtered_agg_over(df, dof_s_pl, pl$col(dof_s_pl) == 1, sw_by_cols, dof_coh_s_col, "sum", filter_result = TRUE)
   } else {
     cluster_dof_s_pl <- paste0("cluster_dof_pl_", i, "_s_XX")
     df <- df$with_columns(
@@ -1564,7 +1682,7 @@ compute_placebo_effects_polars <- function(
   df <- df$with_columns((pl$col(total_ns_s_col) / pl$col(count_ns_s_col))$alias(mean_ns_s_col))
 
   if (is.null(cluster) || cluster == "" || is.na(cluster)) {
-    df <- pl_filtered_agg_over(df, dof_ns_s_pl, pl$col(dof_ns_s_pl) == 1, ns_by_cols, dof_coh_ns_s_col, "sum")
+    df <- pl_filtered_agg_over(df, dof_ns_s_pl, pl$col(dof_ns_s_pl) == 1, ns_by_cols, dof_coh_ns_s_col, "sum", filter_result = TRUE)
   } else {
     cluster_dof_ns_s_pl <- paste0("cluster_dof_pl_", i, "_ns_s_XX")
     df <- df$with_columns(
@@ -1589,10 +1707,14 @@ compute_placebo_effects_polars <- function(
     U_Gg_pl_temp_col <- paste0("U_Gg_pl_", i, "_temp_XX")
     U_Gg_pl_col <- paste0("U_Gg_placebo_", i, "_XX")
 
+    # Safe division to avoid 0/0 = NaN
+    safe_ratio_pl <- pl$when(pl$col(N_gt_ctrl_pl_col) == 0)$
+      then(pl$lit(0))$
+      otherwise(pl$col(N_t_pl_g_col) / pl$col(N_gt_ctrl_pl_col))
     df <- df$with_columns(
       (
         pl$col(dummy_U_pl_col) * (G_XX / N_pl_val) * pl$col("N_gt_XX") *
-        (pl$col(dist_pl_col) - (pl$col(N_t_pl_g_col) / pl$col(N_gt_ctrl_pl_col)) * pl$col(never_pl_col)) *
+        (pl$col(dist_pl_col) - safe_ratio_pl * pl$col(never_pl_col)) *
         pl$col(diff_y_pl_col) *
         ((pl$col("time_XX") >= i + 1) & (pl$col("time_XX") <= pl$col("T_g_XX")))$cast(pl$Float64)
       )$alias(U_Gg_pl_temp_col)
@@ -1613,7 +1735,7 @@ compute_placebo_effects_polars <- function(
       )$then(pl$col("N_gt_XX"))$otherwise(pl$lit(0.0))$alias(count_pl_core_col)
     )
 
-    # U_Gg_pl_temp_var
+    # U_Gg_pl_temp_var - reuse safe_ratio_pl from above
     U_Gg_pl_temp_var_col <- paste0("U_Gg_pl_", i, "_temp_var_XX")
     E_hat_pl_col <- paste0("E_hat_gt_pl_", i, "_XX")
     DOF_pl_col <- paste0("DOF_gt_pl_", i, "_XX")
@@ -1621,7 +1743,7 @@ compute_placebo_effects_polars <- function(
     df <- df$with_columns(
       (
         pl$col(dummy_U_pl_col) * (G_XX / N_pl_val) *
-        (pl$col(dist_pl_col) - (pl$col(N_t_pl_g_col) / pl$col(N_gt_ctrl_pl_col)) * pl$col(never_pl_col)) *
+        (pl$col(dist_pl_col) - safe_ratio_pl * pl$col(never_pl_col)) *
         ((pl$col("time_XX") >= i + 1) & (pl$col("time_XX") <= pl$col("T_g_XX")))$cast(pl$Float64) *
         pl$col("N_gt_XX") * pl$col(DOF_pl_col) *
         (pl$col(diff_y_pl_col) - pl$col(E_hat_pl_col))
@@ -1631,6 +1753,77 @@ compute_placebo_effects_polars <- function(
     # Sum U_Gg_pl_var by group
     U_Gg_pl_var_col <- paste0("U_Gg_pl_", i, "_var_XX")
     df <- pl_sum_over(df, U_Gg_pl_temp_var_col, "group_XX", U_Gg_pl_var_col)
+
+    # Controls adjustment for placebo variance (matches CRAN lines 1427-1448)
+    if (!is.null(controls) && length(controls) > 0 && !is.null(controls_globals)) {
+      part2_pl_col <- paste0("part2_pl_switch", increase_XX, "_", i, "_XX")
+      # Reset part2_pl_switch to 0 before accumulating
+      df <- df$with_columns(pl$lit(0.0)$alias(part2_pl_col))
+
+      count_controls <- length(controls)
+      for (l in levels_d_sq_XX) {
+        # Only include cohort in variance adjustment if useful_res > 1 (matches Stata)
+        useful_res_name <- paste0("useful_res_", l, "_XX")
+        if (!(useful_res_name %in% names(controls_globals)) ||
+            controls_globals[[useful_res_name]] <= 1) next
+
+        l_num <- as.numeric(l)
+        comb_pl_col <- paste0("combined_pl", increase_XX, "_temp_", l, "_", i, "_XX")
+        df <- df$with_columns(pl$lit(0.0)$alias(comb_pl_col))
+
+        for (j in 1:count_controls) {
+          in_brackets_pl_col <- paste0("in_brackets_pl_", l, "_", j, "_XX")
+          if (pl_has_col(df, in_brackets_pl_col)) {
+            # Reset in_brackets_pl
+            df <- df$with_columns(pl$lit(0.0)$alias(in_brackets_pl_col))
+
+            # Add inv_Denom terms
+            inv_denom_name <- paste0("inv_Denom_", l, "_XX")
+            if (inv_denom_name %in% names(controls_globals)) {
+              for (k in 1:count_controls) {
+                in_sum_col <- paste0("in_sum_", k, "_", l, "_XX")
+                if (pl_has_col(df, in_sum_col)) {
+                  inv_denom_jk <- controls_globals[[inv_denom_name]][j, k]
+                  df <- df$with_columns(
+                    pl$when((pl$col("d_sq_int_XX") == l_num) & (pl$col("F_g_XX") >= 3))$
+                      then(pl$col(in_brackets_pl_col) + inv_denom_jk * pl$col(in_sum_col))$
+                      otherwise(pl$col(in_brackets_pl_col))$
+                      alias(in_brackets_pl_col)
+                  )
+                }
+              }
+
+              # Subtract coef
+              coefs_name <- paste0("coefs_sq_", l, "_XX")
+              if (coefs_name %in% names(controls_globals)) {
+                coef_val <- controls_globals[[coefs_name]][j, 1]
+                df <- df$with_columns(
+                  (pl$col(in_brackets_pl_col) - coef_val)$alias(in_brackets_pl_col)
+                )
+              }
+
+              # Add to combined_pl
+              M_pl_col <- paste0("M_pl", increase_XX, "_", l, "_", j, "_", i, "_XX")
+              if (pl_has_col(df, M_pl_col)) {
+                df <- df$with_columns(
+                  (pl$col(comb_pl_col) + pl$col(M_pl_col) * pl$col(in_brackets_pl_col))$alias(comb_pl_col)
+                )
+              }
+            }
+          }
+        }
+
+        # Add to part2_pl_switch
+        df <- df$with_columns(
+          (pl$col(part2_pl_col) + pl$col(comb_pl_col))$alias(part2_pl_col)
+        )
+      }
+
+      # Subtract part2_pl_switch from U_Gg_pl_var
+      df <- df$with_columns(
+        (pl$col(U_Gg_pl_var_col) - pl$col(part2_pl_col))$alias(U_Gg_pl_var_col)
+      )
+    }
 
     # Normalized delta for placebos
     if (normalized == TRUE) {

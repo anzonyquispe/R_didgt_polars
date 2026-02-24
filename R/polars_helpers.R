@@ -1393,7 +1393,8 @@ pl_multi_lag_diff <- function(df, col_name, lags, by_col, prefix = "diff_y_") {
 #' @param agg_func aggregation function name
 #' @return polars DataFrame
 #' @noRd
-pl_filtered_agg_over <- function(df, value_col, filter_expr, by_cols, new_col, agg_func = "sum") {
+pl_filtered_agg_over <- function(df, value_col, filter_expr, by_cols, new_col, agg_func = "sum",
+                                  filter_result = FALSE) {
   # Remove existing column if present
   if (new_col %in% df$columns) {
     df <- df$drop(new_col)
@@ -1411,7 +1412,17 @@ pl_filtered_agg_over <- function(df, value_col, filter_expr, by_cols, new_col, a
   )
 
   over_expr <- pl_over_cols(agg_expr, by_cols)$alias(new_col)
-  df$with_columns(over_expr)
+  df <- df$with_columns(over_expr)
+
+  # If filter_result is TRUE, only assign the aggregated value to rows where filter is TRUE
+  # This matches Stata behavior where "if cond" only assigns to matching rows
+  if (filter_result) {
+    df <- df$with_columns(
+      pl$when(filter_expr)$then(pl$col(new_col))$otherwise(pl$lit(NA_real_))$alias(new_col)
+    )
+  }
+
+  df
 }
 
 #' Compute sum by multiple grouping columns
@@ -1562,11 +1573,21 @@ pl_uniqueN_over <- function(df, count_col, by_cols, new_col, filter_expr = NULL)
   }
 
   if (!is.null(filter_expr)) {
-    # Masked unique count
+    # Masked unique count - like CRAN's uniqueN which excludes NA
+    # First mask non-matching rows to NA, then count unique
     masked <- pl$when(filter_expr)$then(pl$col(count_col))$otherwise(pl$lit(NA))
-    over_expr <- pl_over_cols(masked$n_unique(), by_cols)$alias(new_col)
+    # n_unique() counts NULL as a unique value, but CRAN's uniqueN doesn't
+    # Subtract 1 if there are any nulls in the group to match CRAN behavior
+    raw_count <- masked$n_unique()
+    has_null <- masked$is_null()$any()$cast(pl$Int64)
+    adjusted_count <- raw_count - has_null
+    over_expr <- pl_over_cols(adjusted_count, by_cols)$alias(new_col)
   } else {
-    over_expr <- pl_over_cols(pl$col(count_col)$n_unique(), by_cols)$alias(new_col)
+    # No filter - still need to exclude nulls from count
+    raw_count <- pl$col(count_col)$n_unique()
+    has_null <- pl$col(count_col)$is_null()$any()$cast(pl$Int64)
+    adjusted_count <- raw_count - has_null
+    over_expr <- pl_over_cols(adjusted_count, by_cols)$alias(new_col)
   }
 
   df$with_columns(over_expr)
