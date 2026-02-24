@@ -12,7 +12,7 @@ Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 
 // cummax_by_group_cpp
 IntegerVector cummax_by_group_cpp(IntegerVector x, IntegerVector group);
-RcppExport SEXP _DIDmultiplegtDYNpolars_cummax_by_group_cpp(SEXP xSEXP, SEXP groupSEXP) {
+RcppExport SEXP _DIDmultiplegtDYN_cummax_by_group_cpp(SEXP xSEXP, SEXP groupSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -24,7 +24,7 @@ END_RCPP
 }
 // compute_var_covar_matrix_cpp
 NumericMatrix compute_var_covar_matrix_cpp(NumericMatrix U_Gg_vars, IntegerVector first_obs, int l_XX, double G_XX);
-RcppExport SEXP _DIDmultiplegtDYNpolars_compute_var_covar_matrix_cpp(SEXP U_Gg_varsSEXP, SEXP first_obsSEXP, SEXP l_XXSEXP, SEXP G_XXSEXP) {
+RcppExport SEXP _DIDmultiplegtDYN_compute_var_covar_matrix_cpp(SEXP U_Gg_varsSEXP, SEXP first_obsSEXP, SEXP l_XXSEXP, SEXP G_XXSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -38,7 +38,7 @@ END_RCPP
 }
 // compute_U_Gg_global_cpp
 NumericVector compute_U_Gg_global_cpp(NumericVector U_Gg_plus, NumericVector U_Gg_minus, double N1_weight, double N0_weight);
-RcppExport SEXP _DIDmultiplegtDYNpolars_compute_U_Gg_global_cpp(SEXP U_Gg_plusSEXP, SEXP U_Gg_minusSEXP, SEXP N1_weightSEXP, SEXP N0_weightSEXP) {
+RcppExport SEXP _DIDmultiplegtDYN_compute_U_Gg_global_cpp(SEXP U_Gg_plusSEXP, SEXP U_Gg_minusSEXP, SEXP N1_weightSEXP, SEXP N0_weightSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -52,7 +52,7 @@ END_RCPP
 }
 // compute_clustered_variance_cpp
 List compute_clustered_variance_cpp(NumericVector U_Gg_var, IntegerVector first_obs_gp, IntegerVector first_obs_clust, IntegerVector cluster, double G_XX);
-RcppExport SEXP _DIDmultiplegtDYNpolars_compute_clustered_variance_cpp(SEXP U_Gg_varSEXP, SEXP first_obs_gpSEXP, SEXP first_obs_clustSEXP, SEXP clusterSEXP, SEXP G_XXSEXP) {
+RcppExport SEXP _DIDmultiplegtDYN_compute_clustered_variance_cpp(SEXP U_Gg_varSEXP, SEXP first_obs_gpSEXP, SEXP first_obs_clustSEXP, SEXP clusterSEXP, SEXP G_XXSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -67,7 +67,7 @@ END_RCPP
 }
 // propagate_treatment_change_cpp
 NumericVector propagate_treatment_change_cpp(NumericVector ever_change, IntegerVector group, IntegerVector time, int T_max);
-RcppExport SEXP _DIDmultiplegtDYNpolars_propagate_treatment_change_cpp(SEXP ever_changeSEXP, SEXP groupSEXP, SEXP timeSEXP, SEXP T_maxSEXP) {
+RcppExport SEXP _DIDmultiplegtDYN_propagate_treatment_change_cpp(SEXP ever_changeSEXP, SEXP groupSEXP, SEXP timeSEXP, SEXP T_maxSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -81,7 +81,7 @@ END_RCPP
 }
 // initialize_effect_columns_cpp
 NumericMatrix initialize_effect_columns_cpp(int nrow, int l_XX, bool include_placebo);
-RcppExport SEXP _DIDmultiplegtDYNpolars_initialize_effect_columns_cpp(SEXP nrowSEXP, SEXP l_XXSEXP, SEXP include_placeboSEXP) {
+RcppExport SEXP _DIDmultiplegtDYN_initialize_effect_columns_cpp(SEXP nrowSEXP, SEXP l_XXSEXP, SEXP include_placeboSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -94,7 +94,7 @@ END_RCPP
 }
 // compute_weighted_sum_cpp
 double compute_weighted_sum_cpp(NumericVector x, IntegerVector mask);
-RcppExport SEXP _DIDmultiplegtDYNpolars_compute_weighted_sum_cpp(SEXP xSEXP, SEXP maskSEXP) {
+RcppExport SEXP _DIDmultiplegtDYN_compute_weighted_sum_cpp(SEXP xSEXP, SEXP maskSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -106,7 +106,7 @@ END_RCPP
 }
 // compute_delta_D_g_cpp
 NumericVector compute_delta_D_g_cpp(NumericMatrix delta_plus, NumericMatrix delta_minus, IntegerVector switchers_tag, int l_XX);
-RcppExport SEXP _DIDmultiplegtDYNpolars_compute_delta_D_g_cpp(SEXP delta_plusSEXP, SEXP delta_minusSEXP, SEXP switchers_tagSEXP, SEXP l_XXSEXP) {
+RcppExport SEXP _DIDmultiplegtDYN_compute_delta_D_g_cpp(SEXP delta_plusSEXP, SEXP delta_minusSEXP, SEXP switchers_tagSEXP, SEXP l_XXSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -120,7 +120,7 @@ END_RCPP
 }
 // compute_full_vcov_cpp
 List compute_full_vcov_cpp(NumericMatrix U_Gg_vars_effects, NumericMatrix U_Gg_vars_placebos, IntegerVector first_obs, NumericVector se_effects, NumericVector se_placebos, double G_XX);
-RcppExport SEXP _DIDmultiplegtDYNpolars_compute_full_vcov_cpp(SEXP U_Gg_vars_effectsSEXP, SEXP U_Gg_vars_placebosSEXP, SEXP first_obsSEXP, SEXP se_effectsSEXP, SEXP se_placebosSEXP, SEXP G_XXSEXP) {
+RcppExport SEXP _DIDmultiplegtDYN_compute_full_vcov_cpp(SEXP U_Gg_vars_effectsSEXP, SEXP U_Gg_vars_placebosSEXP, SEXP first_obsSEXP, SEXP se_effectsSEXP, SEXP se_placebosSEXP, SEXP G_XXSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -136,7 +136,7 @@ END_RCPP
 }
 // lag_diff_by_group_cpp
 NumericVector lag_diff_by_group_cpp(NumericVector x, IntegerVector group, int lag_periods);
-RcppExport SEXP _DIDmultiplegtDYNpolars_lag_diff_by_group_cpp(SEXP xSEXP, SEXP groupSEXP, SEXP lag_periodsSEXP) {
+RcppExport SEXP _DIDmultiplegtDYN_lag_diff_by_group_cpp(SEXP xSEXP, SEXP groupSEXP, SEXP lag_periodsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -149,7 +149,7 @@ END_RCPP
 }
 // shift_by_group_cpp
 NumericVector shift_by_group_cpp(NumericVector x, IntegerVector group, int periods);
-RcppExport SEXP _DIDmultiplegtDYNpolars_shift_by_group_cpp(SEXP xSEXP, SEXP groupSEXP, SEXP periodsSEXP) {
+RcppExport SEXP _DIDmultiplegtDYN_shift_by_group_cpp(SEXP xSEXP, SEXP groupSEXP, SEXP periodsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -162,7 +162,7 @@ END_RCPP
 }
 // conditional_sum_by_group_cpp
 NumericVector conditional_sum_by_group_cpp(NumericVector x, IntegerVector condition, IntegerVector group1, IntegerVector group2, Nullable<IntegerVector> group3_);
-RcppExport SEXP _DIDmultiplegtDYNpolars_conditional_sum_by_group_cpp(SEXP xSEXP, SEXP conditionSEXP, SEXP group1SEXP, SEXP group2SEXP, SEXP group3_SEXP) {
+RcppExport SEXP _DIDmultiplegtDYN_conditional_sum_by_group_cpp(SEXP xSEXP, SEXP conditionSEXP, SEXP group1SEXP, SEXP group2SEXP, SEXP group3_SEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -177,7 +177,7 @@ END_RCPP
 }
 // sum_by_group_cpp
 NumericVector sum_by_group_cpp(NumericVector x, IntegerVector group);
-RcppExport SEXP _DIDmultiplegtDYNpolars_sum_by_group_cpp(SEXP xSEXP, SEXP groupSEXP) {
+RcppExport SEXP _DIDmultiplegtDYN_sum_by_group_cpp(SEXP xSEXP, SEXP groupSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -189,7 +189,7 @@ END_RCPP
 }
 // mean_by_group_cpp
 NumericVector mean_by_group_cpp(NumericVector x, IntegerVector group);
-RcppExport SEXP _DIDmultiplegtDYNpolars_mean_by_group_cpp(SEXP xSEXP, SEXP groupSEXP) {
+RcppExport SEXP _DIDmultiplegtDYN_mean_by_group_cpp(SEXP xSEXP, SEXP groupSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -201,7 +201,7 @@ END_RCPP
 }
 // compute_U_Gg_core_cpp
 List compute_U_Gg_core_cpp(NumericVector diff_y, NumericVector distance_to_switch, NumericVector N_t_g, NumericVector N_gt_control, NumericVector never_change, NumericVector N_gt, IntegerVector time_XX, NumericVector T_g, IntegerVector group, IntegerVector first_obs, double G_XX, double N_inc, int i, int t_min, int T_max);
-RcppExport SEXP _DIDmultiplegtDYNpolars_compute_U_Gg_core_cpp(SEXP diff_ySEXP, SEXP distance_to_switchSEXP, SEXP N_t_gSEXP, SEXP N_gt_controlSEXP, SEXP never_changeSEXP, SEXP N_gtSEXP, SEXP time_XXSEXP, SEXP T_gSEXP, SEXP groupSEXP, SEXP first_obsSEXP, SEXP G_XXSEXP, SEXP N_incSEXP, SEXP iSEXP, SEXP t_minSEXP, SEXP T_maxSEXP) {
+RcppExport SEXP _DIDmultiplegtDYN_compute_U_Gg_core_cpp(SEXP diff_ySEXP, SEXP distance_to_switchSEXP, SEXP N_t_gSEXP, SEXP N_gt_controlSEXP, SEXP never_changeSEXP, SEXP N_gtSEXP, SEXP time_XXSEXP, SEXP T_gSEXP, SEXP groupSEXP, SEXP first_obsSEXP, SEXP G_XXSEXP, SEXP N_incSEXP, SEXP iSEXP, SEXP t_minSEXP, SEXP T_maxSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -226,7 +226,7 @@ END_RCPP
 }
 // compute_U_Gg_var_temp_cpp
 NumericVector compute_U_Gg_var_temp_cpp(NumericVector diff_y, NumericVector E_hat_gt, NumericVector DOF_gt, NumericVector distance_to_switch, NumericVector N_t_g, NumericVector N_gt_control, NumericVector never_change, NumericVector N_gt, IntegerVector time_XX, NumericVector T_g, double G_XX, double N_inc, int i);
-RcppExport SEXP _DIDmultiplegtDYNpolars_compute_U_Gg_var_temp_cpp(SEXP diff_ySEXP, SEXP E_hat_gtSEXP, SEXP DOF_gtSEXP, SEXP distance_to_switchSEXP, SEXP N_t_gSEXP, SEXP N_gt_controlSEXP, SEXP never_changeSEXP, SEXP N_gtSEXP, SEXP time_XXSEXP, SEXP T_gSEXP, SEXP G_XXSEXP, SEXP N_incSEXP, SEXP iSEXP) {
+RcppExport SEXP _DIDmultiplegtDYN_compute_U_Gg_var_temp_cpp(SEXP diff_ySEXP, SEXP E_hat_gtSEXP, SEXP DOF_gtSEXP, SEXP distance_to_switchSEXP, SEXP N_t_gSEXP, SEXP N_gt_controlSEXP, SEXP never_changeSEXP, SEXP N_gtSEXP, SEXP time_XXSEXP, SEXP T_gSEXP, SEXP G_XXSEXP, SEXP N_incSEXP, SEXP iSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -249,7 +249,7 @@ END_RCPP
 }
 // compute_dof_indicator_cpp
 IntegerVector compute_dof_indicator_cpp(NumericVector N_gt, NumericVector diff_y, NumericVector never_change, NumericVector N_t, int indicator_type);
-RcppExport SEXP _DIDmultiplegtDYNpolars_compute_dof_indicator_cpp(SEXP N_gtSEXP, SEXP diff_ySEXP, SEXP never_changeSEXP, SEXP N_tSEXP, SEXP indicator_typeSEXP) {
+RcppExport SEXP _DIDmultiplegtDYN_compute_dof_indicator_cpp(SEXP N_gtSEXP, SEXP diff_ySEXP, SEXP never_changeSEXP, SEXP N_tSEXP, SEXP indicator_typeSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -264,7 +264,7 @@ END_RCPP
 }
 // compute_cohort_mean_cpp
 NumericVector compute_cohort_mean_cpp(NumericVector values, NumericVector weights, IntegerVector dof_indicator, IntegerVector group1, IntegerVector group2, Nullable<IntegerVector> group3_);
-RcppExport SEXP _DIDmultiplegtDYNpolars_compute_cohort_mean_cpp(SEXP valuesSEXP, SEXP weightsSEXP, SEXP dof_indicatorSEXP, SEXP group1SEXP, SEXP group2SEXP, SEXP group3_SEXP) {
+RcppExport SEXP _DIDmultiplegtDYN_compute_cohort_mean_cpp(SEXP valuesSEXP, SEXP weightsSEXP, SEXP dof_indicatorSEXP, SEXP group1SEXP, SEXP group2SEXP, SEXP group3_SEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -280,7 +280,7 @@ END_RCPP
 }
 // count_unique_by_group_cpp
 IntegerVector count_unique_by_group_cpp(IntegerVector values, IntegerVector dof_indicator, IntegerVector group1, IntegerVector group2, Nullable<IntegerVector> group3_);
-RcppExport SEXP _DIDmultiplegtDYNpolars_count_unique_by_group_cpp(SEXP valuesSEXP, SEXP dof_indicatorSEXP, SEXP group1SEXP, SEXP group2SEXP, SEXP group3_SEXP) {
+RcppExport SEXP _DIDmultiplegtDYN_count_unique_by_group_cpp(SEXP valuesSEXP, SEXP dof_indicatorSEXP, SEXP group1SEXP, SEXP group2SEXP, SEXP group3_SEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -295,7 +295,7 @@ END_RCPP
 }
 // compute_all_effects_cpp
 List compute_all_effects_cpp(NumericMatrix U_Gg_plus, NumericMatrix U_Gg_minus, NumericMatrix count_plus, NumericMatrix count_minus, NumericVector N1_vec, NumericVector N0_vec, IntegerVector first_obs_by_gp, double G_XX, int l_XX);
-RcppExport SEXP _DIDmultiplegtDYNpolars_compute_all_effects_cpp(SEXP U_Gg_plusSEXP, SEXP U_Gg_minusSEXP, SEXP count_plusSEXP, SEXP count_minusSEXP, SEXP N1_vecSEXP, SEXP N0_vecSEXP, SEXP first_obs_by_gpSEXP, SEXP G_XXSEXP, SEXP l_XXSEXP) {
+RcppExport SEXP _DIDmultiplegtDYN_compute_all_effects_cpp(SEXP U_Gg_plusSEXP, SEXP U_Gg_minusSEXP, SEXP count_plusSEXP, SEXP count_minusSEXP, SEXP N1_vecSEXP, SEXP N0_vecSEXP, SEXP first_obs_by_gpSEXP, SEXP G_XXSEXP, SEXP l_XXSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -314,7 +314,7 @@ END_RCPP
 }
 // compute_all_variances_cpp
 List compute_all_variances_cpp(NumericMatrix U_Gg_var_in, NumericMatrix U_Gg_var_out, NumericVector N1_vec, NumericVector N0_vec, IntegerVector first_obs_by_gp, IntegerVector first_obs_by_clust, IntegerVector cluster_XX, double G_XX, int l_XX, bool clustered);
-RcppExport SEXP _DIDmultiplegtDYNpolars_compute_all_variances_cpp(SEXP U_Gg_var_inSEXP, SEXP U_Gg_var_outSEXP, SEXP N1_vecSEXP, SEXP N0_vecSEXP, SEXP first_obs_by_gpSEXP, SEXP first_obs_by_clustSEXP, SEXP cluster_XXSEXP, SEXP G_XXSEXP, SEXP l_XXSEXP, SEXP clusteredSEXP) {
+RcppExport SEXP _DIDmultiplegtDYN_compute_all_variances_cpp(SEXP U_Gg_var_inSEXP, SEXP U_Gg_var_outSEXP, SEXP N1_vecSEXP, SEXP N0_vecSEXP, SEXP first_obs_by_gpSEXP, SEXP first_obs_by_clustSEXP, SEXP cluster_XXSEXP, SEXP G_XXSEXP, SEXP l_XXSEXP, SEXP clusteredSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -334,7 +334,7 @@ END_RCPP
 }
 // compute_placebo_effects_and_variances_cpp
 List compute_placebo_effects_and_variances_cpp(NumericMatrix U_Gg_pl_plus, NumericMatrix U_Gg_pl_minus, NumericMatrix count_pl_plus, NumericMatrix count_pl_minus, NumericMatrix U_Gg_var_pl_in, NumericMatrix U_Gg_var_pl_out, NumericVector N1_pl_vec, NumericVector N0_pl_vec, IntegerVector first_obs_by_gp, IntegerVector first_obs_by_clust, IntegerVector cluster_XX, double G_XX, int l_placebo_XX, bool clustered);
-RcppExport SEXP _DIDmultiplegtDYNpolars_compute_placebo_effects_and_variances_cpp(SEXP U_Gg_pl_plusSEXP, SEXP U_Gg_pl_minusSEXP, SEXP count_pl_plusSEXP, SEXP count_pl_minusSEXP, SEXP U_Gg_var_pl_inSEXP, SEXP U_Gg_var_pl_outSEXP, SEXP N1_pl_vecSEXP, SEXP N0_pl_vecSEXP, SEXP first_obs_by_gpSEXP, SEXP first_obs_by_clustSEXP, SEXP cluster_XXSEXP, SEXP G_XXSEXP, SEXP l_placebo_XXSEXP, SEXP clusteredSEXP) {
+RcppExport SEXP _DIDmultiplegtDYN_compute_placebo_effects_and_variances_cpp(SEXP U_Gg_pl_plusSEXP, SEXP U_Gg_pl_minusSEXP, SEXP count_pl_plusSEXP, SEXP count_pl_minusSEXP, SEXP U_Gg_var_pl_inSEXP, SEXP U_Gg_var_pl_outSEXP, SEXP N1_pl_vecSEXP, SEXP N0_pl_vecSEXP, SEXP first_obs_by_gpSEXP, SEXP first_obs_by_clustSEXP, SEXP cluster_XXSEXP, SEXP G_XXSEXP, SEXP l_placebo_XXSEXP, SEXP clusteredSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -358,7 +358,7 @@ END_RCPP
 }
 // compute_vcov_full_cpp
 NumericMatrix compute_vcov_full_cpp(NumericMatrix U_Gg_var_glob, IntegerVector first_obs, NumericVector se_vec, bool normalized, Nullable<NumericVector> delta_D_global_, double G_XX);
-RcppExport SEXP _DIDmultiplegtDYNpolars_compute_vcov_full_cpp(SEXP U_Gg_var_globSEXP, SEXP first_obsSEXP, SEXP se_vecSEXP, SEXP normalizedSEXP, SEXP delta_D_global_SEXP, SEXP G_XXSEXP) {
+RcppExport SEXP _DIDmultiplegtDYN_compute_vcov_full_cpp(SEXP U_Gg_var_globSEXP, SEXP first_obsSEXP, SEXP se_vecSEXP, SEXP normalizedSEXP, SEXP delta_D_global_SEXP, SEXP G_XXSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -374,7 +374,7 @@ END_RCPP
 }
 // compute_avg_effect_cpp
 List compute_avg_effect_cpp(NumericVector U_Gg_plus, NumericVector U_Gg_minus, NumericVector U_Gg_var_plus, NumericVector U_Gg_var_minus, IntegerVector first_obs_by_gp, IntegerVector first_obs_by_clust, IntegerVector cluster_XX, double w_plus, double G_XX, bool clustered);
-RcppExport SEXP _DIDmultiplegtDYNpolars_compute_avg_effect_cpp(SEXP U_Gg_plusSEXP, SEXP U_Gg_minusSEXP, SEXP U_Gg_var_plusSEXP, SEXP U_Gg_var_minusSEXP, SEXP first_obs_by_gpSEXP, SEXP first_obs_by_clustSEXP, SEXP cluster_XXSEXP, SEXP w_plusSEXP, SEXP G_XXSEXP, SEXP clusteredSEXP) {
+RcppExport SEXP _DIDmultiplegtDYN_compute_avg_effect_cpp(SEXP U_Gg_plusSEXP, SEXP U_Gg_minusSEXP, SEXP U_Gg_var_plusSEXP, SEXP U_Gg_var_minusSEXP, SEXP first_obs_by_gpSEXP, SEXP first_obs_by_clustSEXP, SEXP cluster_XXSEXP, SEXP w_plusSEXP, SEXP G_XXSEXP, SEXP clusteredSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -394,7 +394,7 @@ END_RCPP
 }
 // same_switchers_loop_cpp
 List same_switchers_loop_cpp(NumericVector outcome, IntegerVector group, IntegerVector time, NumericVector F_g, NumericVector N_gt, IntegerVector d_sq, int effects, int T_max, bool only_never_switchers);
-RcppExport SEXP _DIDmultiplegtDYNpolars_same_switchers_loop_cpp(SEXP outcomeSEXP, SEXP groupSEXP, SEXP timeSEXP, SEXP F_gSEXP, SEXP N_gtSEXP, SEXP d_sqSEXP, SEXP effectsSEXP, SEXP T_maxSEXP, SEXP only_never_switchersSEXP) {
+RcppExport SEXP _DIDmultiplegtDYN_same_switchers_loop_cpp(SEXP outcomeSEXP, SEXP groupSEXP, SEXP timeSEXP, SEXP F_gSEXP, SEXP N_gtSEXP, SEXP d_sqSEXP, SEXP effectsSEXP, SEXP T_maxSEXP, SEXP only_never_switchersSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -413,35 +413,35 @@ END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
-    {"_DIDmultiplegtDYNpolars_cummax_by_group_cpp", (DL_FUNC) &_DIDmultiplegtDYNpolars_cummax_by_group_cpp, 2},
-    {"_DIDmultiplegtDYNpolars_compute_var_covar_matrix_cpp", (DL_FUNC) &_DIDmultiplegtDYNpolars_compute_var_covar_matrix_cpp, 4},
-    {"_DIDmultiplegtDYNpolars_compute_U_Gg_global_cpp", (DL_FUNC) &_DIDmultiplegtDYNpolars_compute_U_Gg_global_cpp, 4},
-    {"_DIDmultiplegtDYNpolars_compute_clustered_variance_cpp", (DL_FUNC) &_DIDmultiplegtDYNpolars_compute_clustered_variance_cpp, 5},
-    {"_DIDmultiplegtDYNpolars_propagate_treatment_change_cpp", (DL_FUNC) &_DIDmultiplegtDYNpolars_propagate_treatment_change_cpp, 4},
-    {"_DIDmultiplegtDYNpolars_initialize_effect_columns_cpp", (DL_FUNC) &_DIDmultiplegtDYNpolars_initialize_effect_columns_cpp, 3},
-    {"_DIDmultiplegtDYNpolars_compute_weighted_sum_cpp", (DL_FUNC) &_DIDmultiplegtDYNpolars_compute_weighted_sum_cpp, 2},
-    {"_DIDmultiplegtDYNpolars_compute_delta_D_g_cpp", (DL_FUNC) &_DIDmultiplegtDYNpolars_compute_delta_D_g_cpp, 4},
-    {"_DIDmultiplegtDYNpolars_compute_full_vcov_cpp", (DL_FUNC) &_DIDmultiplegtDYNpolars_compute_full_vcov_cpp, 6},
-    {"_DIDmultiplegtDYNpolars_lag_diff_by_group_cpp", (DL_FUNC) &_DIDmultiplegtDYNpolars_lag_diff_by_group_cpp, 3},
-    {"_DIDmultiplegtDYNpolars_shift_by_group_cpp", (DL_FUNC) &_DIDmultiplegtDYNpolars_shift_by_group_cpp, 3},
-    {"_DIDmultiplegtDYNpolars_conditional_sum_by_group_cpp", (DL_FUNC) &_DIDmultiplegtDYNpolars_conditional_sum_by_group_cpp, 5},
-    {"_DIDmultiplegtDYNpolars_sum_by_group_cpp", (DL_FUNC) &_DIDmultiplegtDYNpolars_sum_by_group_cpp, 2},
-    {"_DIDmultiplegtDYNpolars_mean_by_group_cpp", (DL_FUNC) &_DIDmultiplegtDYNpolars_mean_by_group_cpp, 2},
-    {"_DIDmultiplegtDYNpolars_compute_U_Gg_core_cpp", (DL_FUNC) &_DIDmultiplegtDYNpolars_compute_U_Gg_core_cpp, 15},
-    {"_DIDmultiplegtDYNpolars_compute_U_Gg_var_temp_cpp", (DL_FUNC) &_DIDmultiplegtDYNpolars_compute_U_Gg_var_temp_cpp, 13},
-    {"_DIDmultiplegtDYNpolars_compute_dof_indicator_cpp", (DL_FUNC) &_DIDmultiplegtDYNpolars_compute_dof_indicator_cpp, 5},
-    {"_DIDmultiplegtDYNpolars_compute_cohort_mean_cpp", (DL_FUNC) &_DIDmultiplegtDYNpolars_compute_cohort_mean_cpp, 6},
-    {"_DIDmultiplegtDYNpolars_count_unique_by_group_cpp", (DL_FUNC) &_DIDmultiplegtDYNpolars_count_unique_by_group_cpp, 5},
-    {"_DIDmultiplegtDYNpolars_compute_all_effects_cpp", (DL_FUNC) &_DIDmultiplegtDYNpolars_compute_all_effects_cpp, 9},
-    {"_DIDmultiplegtDYNpolars_compute_all_variances_cpp", (DL_FUNC) &_DIDmultiplegtDYNpolars_compute_all_variances_cpp, 10},
-    {"_DIDmultiplegtDYNpolars_compute_placebo_effects_and_variances_cpp", (DL_FUNC) &_DIDmultiplegtDYNpolars_compute_placebo_effects_and_variances_cpp, 14},
-    {"_DIDmultiplegtDYNpolars_compute_vcov_full_cpp", (DL_FUNC) &_DIDmultiplegtDYNpolars_compute_vcov_full_cpp, 6},
-    {"_DIDmultiplegtDYNpolars_compute_avg_effect_cpp", (DL_FUNC) &_DIDmultiplegtDYNpolars_compute_avg_effect_cpp, 10},
-    {"_DIDmultiplegtDYNpolars_same_switchers_loop_cpp", (DL_FUNC) &_DIDmultiplegtDYNpolars_same_switchers_loop_cpp, 9},
+    {"_DIDmultiplegtDYN_cummax_by_group_cpp", (DL_FUNC) &_DIDmultiplegtDYN_cummax_by_group_cpp, 2},
+    {"_DIDmultiplegtDYN_compute_var_covar_matrix_cpp", (DL_FUNC) &_DIDmultiplegtDYN_compute_var_covar_matrix_cpp, 4},
+    {"_DIDmultiplegtDYN_compute_U_Gg_global_cpp", (DL_FUNC) &_DIDmultiplegtDYN_compute_U_Gg_global_cpp, 4},
+    {"_DIDmultiplegtDYN_compute_clustered_variance_cpp", (DL_FUNC) &_DIDmultiplegtDYN_compute_clustered_variance_cpp, 5},
+    {"_DIDmultiplegtDYN_propagate_treatment_change_cpp", (DL_FUNC) &_DIDmultiplegtDYN_propagate_treatment_change_cpp, 4},
+    {"_DIDmultiplegtDYN_initialize_effect_columns_cpp", (DL_FUNC) &_DIDmultiplegtDYN_initialize_effect_columns_cpp, 3},
+    {"_DIDmultiplegtDYN_compute_weighted_sum_cpp", (DL_FUNC) &_DIDmultiplegtDYN_compute_weighted_sum_cpp, 2},
+    {"_DIDmultiplegtDYN_compute_delta_D_g_cpp", (DL_FUNC) &_DIDmultiplegtDYN_compute_delta_D_g_cpp, 4},
+    {"_DIDmultiplegtDYN_compute_full_vcov_cpp", (DL_FUNC) &_DIDmultiplegtDYN_compute_full_vcov_cpp, 6},
+    {"_DIDmultiplegtDYN_lag_diff_by_group_cpp", (DL_FUNC) &_DIDmultiplegtDYN_lag_diff_by_group_cpp, 3},
+    {"_DIDmultiplegtDYN_shift_by_group_cpp", (DL_FUNC) &_DIDmultiplegtDYN_shift_by_group_cpp, 3},
+    {"_DIDmultiplegtDYN_conditional_sum_by_group_cpp", (DL_FUNC) &_DIDmultiplegtDYN_conditional_sum_by_group_cpp, 5},
+    {"_DIDmultiplegtDYN_sum_by_group_cpp", (DL_FUNC) &_DIDmultiplegtDYN_sum_by_group_cpp, 2},
+    {"_DIDmultiplegtDYN_mean_by_group_cpp", (DL_FUNC) &_DIDmultiplegtDYN_mean_by_group_cpp, 2},
+    {"_DIDmultiplegtDYN_compute_U_Gg_core_cpp", (DL_FUNC) &_DIDmultiplegtDYN_compute_U_Gg_core_cpp, 15},
+    {"_DIDmultiplegtDYN_compute_U_Gg_var_temp_cpp", (DL_FUNC) &_DIDmultiplegtDYN_compute_U_Gg_var_temp_cpp, 13},
+    {"_DIDmultiplegtDYN_compute_dof_indicator_cpp", (DL_FUNC) &_DIDmultiplegtDYN_compute_dof_indicator_cpp, 5},
+    {"_DIDmultiplegtDYN_compute_cohort_mean_cpp", (DL_FUNC) &_DIDmultiplegtDYN_compute_cohort_mean_cpp, 6},
+    {"_DIDmultiplegtDYN_count_unique_by_group_cpp", (DL_FUNC) &_DIDmultiplegtDYN_count_unique_by_group_cpp, 5},
+    {"_DIDmultiplegtDYN_compute_all_effects_cpp", (DL_FUNC) &_DIDmultiplegtDYN_compute_all_effects_cpp, 9},
+    {"_DIDmultiplegtDYN_compute_all_variances_cpp", (DL_FUNC) &_DIDmultiplegtDYN_compute_all_variances_cpp, 10},
+    {"_DIDmultiplegtDYN_compute_placebo_effects_and_variances_cpp", (DL_FUNC) &_DIDmultiplegtDYN_compute_placebo_effects_and_variances_cpp, 14},
+    {"_DIDmultiplegtDYN_compute_vcov_full_cpp", (DL_FUNC) &_DIDmultiplegtDYN_compute_vcov_full_cpp, 6},
+    {"_DIDmultiplegtDYN_compute_avg_effect_cpp", (DL_FUNC) &_DIDmultiplegtDYN_compute_avg_effect_cpp, 10},
+    {"_DIDmultiplegtDYN_same_switchers_loop_cpp", (DL_FUNC) &_DIDmultiplegtDYN_same_switchers_loop_cpp, 9},
     {NULL, NULL, 0}
 };
 
-RcppExport void R_init_DIDmultiplegtDYNpolars(DllInfo *dll) {
+RcppExport void R_init_DIDmultiplegtDYN(DllInfo *dll) {
     R_registerRoutines(dll, NULL, CallEntries, NULL, NULL);
     R_useDynamicSymbols(dll, FALSE);
 }

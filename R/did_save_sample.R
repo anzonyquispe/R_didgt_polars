@@ -2,7 +2,7 @@
 #' @param data data
 #' @param Gn Gn
 #' @param Tn Tn
-#' @import polars
+#' @note polars is suggested for better performance
 #' @returns The input dataframe df plus two added columns.
 #' @noRd
 did_save_sample <- function(

@@ -5,7 +5,7 @@
 #' @param by by
 #' @param by_index by_index
 #' @param file file
-#' @import polars
+#' @note polars is suggested for better performance
 #' @returns A list with the design option output.
 #' @noRd
 did_multiplegt_dyn_design <- function(

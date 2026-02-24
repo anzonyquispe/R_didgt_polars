@@ -1,6 +1,24 @@
-#' @useDynLib DIDmultiplegtDYNpolars, .registration = TRUE
+#' @useDynLib DIDmultiplegtDYN, .registration = TRUE
 #' @importFrom Rcpp sourceCpp
+#' @importFrom stats aggregate ave
+#' @importFrom utils head
 NULL
+
+# Declare global variables to avoid R CMD check NOTEs
+# pl and as_polars_df are dynamically assigned after polars availability check
+utils::globalVariables(c(
+  "pl",
+  "as_polars_df",
+  "M_g_XX",
+  "delta_D_g_XX",
+  "delta_D_g_XX_temp",
+  "switchers_tag_XX",
+  "outcome_non_diff_XX",
+  "feasible_het_XX",
+  "var_weighted",
+  "clust_var_sum",
+  "clust_var_sq"
+))
 
 # ============================================================================
 # POLARS COMPATIBILITY HELPERS

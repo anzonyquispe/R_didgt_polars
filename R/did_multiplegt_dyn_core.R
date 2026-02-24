@@ -28,7 +28,7 @@
 #' @param controls_globals controls_globals
 #' @param less_conservative_se less_conservative_se
 #' @param continuous continuous
-#' @import polars
+#' @note polars is suggested for better performance
 #' @importFrom stats na.omit predict setNames
 #' @importFrom MASS ginv
 #' @importFrom fixest feols
@@ -77,11 +77,14 @@ did_multiplegt_dyn_core <- function(
     }
   }
 
+  # Get pl from polars namespace (polars availability already checked by caller)
+  pl <- .get_pl()
+
   # Ensure df is a polars DataFrame
   is_polars <- inherits(df, "polars_data_frame") || inherits(df, "RPolarsDataFrame")
   if (!is_polars) {
     if (inherits(df, "data.table") || inherits(df, "data.frame")) {
-      df <- as_polars_df(as.data.frame(df))
+      df <- .as_polars_df(as.data.frame(df))
     } else {
       stop("df must be a polars DataFrame, data.table, or data.frame")
     }

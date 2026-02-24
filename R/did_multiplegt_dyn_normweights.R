@@ -4,7 +4,7 @@
 #' @param normopt normopt
 #' @param same_switchers same_switchers
 #' @param continuous continuous
-#' @import polars
+#' @note polars is suggested for better performance
 #' @returns A matrix with the normalized_weights option output.
 #' @noRd
 did_multiplegt_dyn_normweights <- function(

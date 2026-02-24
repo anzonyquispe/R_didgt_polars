@@ -3,7 +3,7 @@
 #' @param df df
 #' @param group group
 #' @param by by
-#' @import polars
+#' @note polars is suggested for better performance
 #' @returns A logical value.
 #' @noRd 
 did_multiplegt_dyn_by_check <- function(

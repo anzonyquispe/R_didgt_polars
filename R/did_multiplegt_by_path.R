@@ -26,7 +26,7 @@
 #' @param less_conservative_se less_conservative_se
 #' @param continuous continuous
 #' @returns A dataframe with the by_path classifier
-#' @import polars
+#' @note polars is suggested for better performance
 #' @noRd
 
 did_multiplegt_by_path <- function(

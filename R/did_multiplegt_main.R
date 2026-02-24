@@ -31,7 +31,12 @@
 #' @param less_conservative_se less_conservative_se
 #' @param continuous continuous
 #' @param data_only data_only
+<<<<<<< Updated upstream
 #' @import polars
+=======
+#' @note polars is suggested for better performance
+#' @import data.table
+>>>>>>> Stashed changes
 #' @importFrom dplyr lag
 #' @importFrom matlib Ginv
 #' @importFrom utils write.csv
@@ -72,6 +77,20 @@ did_multiplegt_main <- function(
   continuous,
   data_only = FALSE
   ) {
+
+# Check polars availability
+if (!.polars_available()) {
+  stop(
+    "The 'polars' package is required but not installed.\n",
+    "Please install it from r-universe with:\n",
+    "  install.packages('polars', repos = 'https://rpolars.r-universe.dev')\n",
+    call. = FALSE
+  )
+}
+
+# Load polars namespace
+pl <- .get_pl()
+as_polars_df <- function(x) .as_polars_df(x)
 
 suppressWarnings({
 

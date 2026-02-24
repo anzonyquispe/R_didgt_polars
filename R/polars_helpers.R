@@ -1,9 +1,23 @@
-#' Polars Helper Functions for DIDmultiplegtDYNpolars
-#'
-#' This file contains utility functions to perform common operations on polars
-#' DataFrames that would normally require data.frame syntax.
-#' @import polars
 #' @noRd
+NULL
+
+# Polars Helper Functions for DIDmultiplegtDYN
+#
+# This file contains utility functions to perform common operations on polars
+# DataFrames that would normally require data.frame syntax.
+#
+# Note: polars is a suggested package. These helpers assume polars is loaded
+# by the calling function (did_multiplegt_main checks for polars availability).
+
+# Get pl object from polars namespace (called by functions that need pl$)
+.ensure_pl <- function() {
+  if (!exists("pl", envir = parent.frame())) {
+    if (!.polars_available()) {
+      stop("polars is required. Install with: install.packages('polars', repos = 'https://rpolars.r-universe.dev')")
+    }
+    assign("pl", .get_pl(), envir = parent.frame())
+  }
+}
 
 #' Apply over() window function with dynamic column names
 #' @param expr polars expression (e.g., pl$col("x")$sum())
@@ -965,7 +979,7 @@ pl_to_dt <- function(df) {
 #' @return polars DataFrame
 #' @noRd
 dt_to_pl <- function(dt) {
-  as_polars_df(as.data.frame(dt))
+  .as_polars_df(as.data.frame(dt))
 }
 
 #' Batch compute multiple column statistics
@@ -1128,7 +1142,7 @@ pl_fifelse <- function(condition, true_val, false_val, na_val = NULL) {
 }
 
 #' Conditional assignment: update column only where condition is TRUE
-#' Similar to data.table's df[condition, col := value]
+#' Similar to data.table syntax for conditional updates
 #' @param df polars DataFrame
 #' @param col_name column to update
 #' @param condition polars expression for condition

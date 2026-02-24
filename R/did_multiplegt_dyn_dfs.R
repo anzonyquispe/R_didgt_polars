@@ -4,7 +4,7 @@
 #' @param by by
 #' @param by_index by_index
 #' @param file file
-#' @import polars
+#' @note polars is suggested for better performance
 #' @returns A list with the date_first_switch output.
 #' @noRd
 did_multiplegt_dyn_dfs <- function(
