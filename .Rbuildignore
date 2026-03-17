@@ -1,0 +1,8 @@
+^\.DS_Store$
+^\.git$
+^\.gitignore$
+^.*\.Rproj$
+^\.Rproj\.user$
+^Rplots\.pdf$
+^debug_matrices$
+^DIDmultiplegtDYN_.*\.tar\.gz$
