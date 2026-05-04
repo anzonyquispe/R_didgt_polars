@@ -65,7 +65,7 @@ did_multiplegt_by_path <- function(
     path_index <- as.data.frame(data$df)
     l_XX <- data$l_XX
     T_max_XX <- data$T_max_XX
-    path_index <- path_index[, c("group", "time", "time_XX", "treatment_XX", "F_g_XX")]
+    path_index <- path_index[, c("group", "time", "time_XX", "treatment_XX", "F_g_XX", "d_sq_XX")]
 
     data <- NULL
     if (by_path == -1) {
@@ -73,7 +73,7 @@ did_multiplegt_by_path <- function(
     }
     design_set <- matrix(design_base$design_mat[1:min(by_path, nrow(design_base$design_mat)), ], ncol = ncol(design_base$design_mat), nrow = min(by_path, nrow(design_base$design_mat)))
     if (by_path > nrow(design_base$design_mat)) {
-        message(sprintf("You requested %.0f treatment paths, but there are only %.0f paths in your data. The program will continue with the latter number of treatment paths."))
+        message(sprintf("You requested %.0f treatment paths, but there are only %.0f paths in your data. The program will continue with the latter number of treatment paths.", by_path, nrow(design_base$design_mat)))
     }
     path <- design_set[,3]
     for (j in 1:l_XX) {
@@ -104,7 +104,8 @@ did_multiplegt_by_path <- function(
     }
     path_index$yet_to_switch_XX <- as.numeric(path_index$time_XX < path_index$F_g_XX)
     path_index$time_XX <- path_index$F_g_XX <- NULL
-    path_index$baseline_XX <- substr(path_index$path,1,1)
+    path_index$baseline_XX <- path_index$d_sq_XX
+    path_index$d_sq_XX <- NULL
 
     names(path_index)[names(path_index) == "group"] <- group
     names(path_index)[names(path_index) == "time"] <- time

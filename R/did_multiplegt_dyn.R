@@ -399,8 +399,9 @@ did_multiplegt_dyn <- function(
         df_main <- subset(df, df[[by]] == by_levels[b])
         message(sprintf("Running did_multiplegt_dyn for %s = %s", by, by_levels[b]))
         } else if (!is.null(by_path)) {
-          df_main <- subset(df, df$path_XX == by_levels[b] | 
-              (df$yet_to_switch == 1 & df$baseline_XX == substr(by_levels[b],1,1)))
+          path_baseline <- as.numeric(strsplit(by_levels[b], ",")[[1]][1])
+          df_main <- subset(df, df$path_XX == by_levels[b] |
+              (df$yet_to_switch_XX == 1 & df$baseline_XX == path_baseline))
           df_main$path_XX <- df_main$yet_to_switch_XX <- df_main$baseline_XX <- NULL
           message(sprintf("Running did_multiplegt_dyn for treatment path (%s)", by_levels[b]))
         }
